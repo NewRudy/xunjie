@@ -1,6 +1,7 @@
 // 前端任务状态 store：MissionState 的唯一前端镜像（后端状态机是唯一写入方，
 // 前端只展示后端返回值，不在本地推进任务阶段）。
 import { reactive } from 'vue'
+import { markDemoAnomalyResolved } from '../state/parkState'
 import type {
   Approval,
   ContextItem,
@@ -127,7 +128,11 @@ export function applyResponse(resp: MissionResponse | ResultEnvelope<MissionResp
  // pendingApproval 以后端为准；审批通过后后端应清空
  missionStore.pendingApproval = r.pendingApproval ?? r.mission?.pendingApproval ?? null
  if (Array.isArray(r.sceneCommands)) missionStore.sceneCommands = r.sceneCommands
-  if (r.receipt !== undefined) missionStore.receipt = r.receipt ?? null
+  if (r.receipt !== undefined) {
+    missionStore.receipt = r.receipt ?? null
+    // 闭环恢复只由后端回执驱动：三维着色与 InfoCard 经 parkState 订阅同步
+    if (missionStore.receipt?.anomalyStatus === 'resolved') markDemoAnomalyResolved()
+  }
   if (r.inspectionTask !== undefined) missionStore.inspectionTask = r.inspectionTask ?? null
   // 模型在线/回退状态：只认后端显式声明
   const mode = r.model?.mode

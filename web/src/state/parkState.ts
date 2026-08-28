@@ -30,7 +30,19 @@ export function onStatusChange(fn: Listener): void {
 // 演示异常（fixture demoAnomaly）：组串 STR-B2-07 电流偏低 18%，
 // 其所属逆变器 INV-B-02 默认置为 fault 红。
 const anomalyTarget = fixture.strings.find((s) => s.id === fixture.demoAnomaly.targetStringId)
-if (anomalyTarget) {
+
+/** 演示复位：后端 /api/debug/reset 成功后调用，恢复演示异常为 fault */
+export function markDemoAnomalyFault(): void {
+  if (!anomalyTarget) return
   setStatus(anomalyTarget.inverterId, 'fault')
   setStatus(anomalyTarget.id, 'fault')
 }
+
+/** 闭环恢复：仅由后端闭环回执（anomalyStatus=resolved）驱动，维修特效不得直接调用 */
+export function markDemoAnomalyResolved(): void {
+  if (!anomalyTarget) return
+  setStatus(anomalyTarget.inverterId, 'normal')
+  setStatus(anomalyTarget.id, 'normal')
+}
+
+markDemoAnomalyFault()

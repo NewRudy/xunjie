@@ -194,11 +194,14 @@ function submit(): void {
           巡检单：{{ missionStore.mission.inspectionTaskId }}
         </div>
 
-        <ol v-if="missionStore.mission.plan?.steps?.length" class="steps">
-          <li v-for="s in missionStore.mission.plan!.steps" :key="s.id" :class="`st-${s.status}`">
-            {{ s.title }}<span v-if="s.targetId" class="tid">{{ s.targetId }}</span>
-          </li>
-        </ol>
+        <details v-if="missionStore.mission.plan?.steps?.length" class="plan-detail">
+          <summary>计划步骤（{{ missionStore.mission.plan!.steps.length }}）</summary>
+          <ol class="steps">
+            <li v-for="s in missionStore.mission.plan!.steps" :key="s.id" :class="`st-${s.status}`">
+              {{ s.title }}<span v-if="s.targetId" class="tid">{{ s.targetId }}</span>
+            </li>
+          </ol>
+        </details>
       </section>
 
       <section v-if="missionStore.receipt" class="receipt">
@@ -226,8 +229,29 @@ function submit(): void {
         </div>
       </section>
 
+      <section v-if="missionStore.proposal && !missionStore.receipt" class="proposal">
+        <div class="sec-title">建议提案</div>
+        <div v-if="missionStore.proposal.summary" class="kv">{{ missionStore.proposal.summary }}</div>
+        <div v-if="missionStore.proposal.targetId" class="kv">目标：{{ missionStore.proposal.targetId }}</div>
+        <div v-if="missionStore.proposal.reason" class="kv">原因：{{ missionStore.proposal.reason }}</div>
+        <div v-if="missionStore.proposal.requiredEvidence?.length" class="kv">
+          证据要求：{{ missionStore.proposal.requiredEvidence.join('、') }}
+        </div>
+
+        <div v-if="missionStore.pendingApproval" class="approval">
+          <div class="kv warn">
+            待审批动作：{{ missionStore.pendingApproval.requestedActions.join('、') || '（后端未列出）' }}
+          </div>
+          <div class="kv">影响范围：仅数字仿真（digital-simulation-only）</div>
+          <div class="btn-row">
+            <button class="approve" @click="decide('approve')">同意</button>
+            <button class="reject" @click="decide('reject')">拒绝</button>
+          </div>
+        </div>
+      </section>
+
       <section v-if="signalCards.length" class="signals">
-        <div class="sec-title">研判依据（{{ missionStore.context.length }} 项上下文）</div>
+        <div class="sec-title">研判依据（决策时快照 · {{ missionStore.context.length }} 项）</div>
         <div v-for="g in signalCards" :key="g.title" class="card">
           <div class="card-title">{{ g.title }}</div>
           <div v-for="c in g.items" :key="c.key" class="card-item">
@@ -251,27 +275,6 @@ function submit(): void {
             </span>
           </div>
         </details>
-      </section>
-
-      <section v-if="missionStore.proposal" class="proposal">
-        <div class="sec-title">建议提案</div>
-        <div v-if="missionStore.proposal.summary" class="kv">{{ missionStore.proposal.summary }}</div>
-        <div v-if="missionStore.proposal.targetId" class="kv">目标：{{ missionStore.proposal.targetId }}</div>
-        <div v-if="missionStore.proposal.reason" class="kv">原因：{{ missionStore.proposal.reason }}</div>
-        <div v-if="missionStore.proposal.requiredEvidence?.length" class="kv">
-          证据要求：{{ missionStore.proposal.requiredEvidence.join('、') }}
-        </div>
-
-        <div v-if="missionStore.pendingApproval" class="approval">
-          <div class="kv warn">
-            待审批动作：{{ missionStore.pendingApproval.requestedActions.join('、') || '（后端未列出）' }}
-          </div>
-          <div class="kv">影响范围：仅数字仿真（digital-simulation-only）</div>
-          <div class="btn-row">
-            <button class="approve" @click="decide('approve')">同意</button>
-            <button class="reject" @click="decide('reject')">拒绝</button>
-          </div>
-        </div>
       </section>
 
       <section class="evidence">
@@ -562,6 +565,14 @@ section {
 .steps {
   margin: 6px 0 0;
   padding-left: 18px;
+}
+.plan-detail {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #8fa3b5;
+}
+.plan-detail summary {
+  cursor: pointer;
 }
 .steps li {
   padding: 2px 0;

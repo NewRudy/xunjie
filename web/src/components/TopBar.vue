@@ -1,26 +1,18 @@
 <script setup lang="ts">
-// 顶部细条：产品名 + 占位 Tab（大屏/集控中心/巡检/报告，为 P3/P4/P5 留位）+ 关于
-import { fixture } from '../fixture'
-
+// 顶部细条：巡界品牌 + 数字现场状态 + 关于（大屏/集控中心/巡检/报告占位入口已隐藏）
 export type TabKey = 'scene' | 'screen' | 'control' | 'inspection' | 'report'
 
 defineProps<{ activeTab: TabKey }>()
 const emit = defineEmits<{ (e: 'switch', tab: TabKey): void; (e: 'about'): void }>()
 
-const tabs: { key: TabKey; label: string }[] = [
-  { key: 'scene', label: '场景' },
-  { key: 'screen', label: '大屏' },
-  { key: 'control', label: '集控中心' },
-  { key: 'inspection', label: '巡检' },
-  { key: 'report', label: '报告' },
-]
+const tabs: { key: TabKey; label: string }[] = [{ key: 'scene', label: '数字现场' }]
 </script>
 
 <template>
   <header class="topbar">
     <div class="brand">
-      <span class="name">黔光智维 PECC</span>
-      <span class="park">{{ fixture.name }}</span>
+      <span class="name">巡界 XUNJIE</span>
+      <span class="park">设备超级巡检人 · 光伏数字现场</span>
     </div>
     <nav class="tabs">
       <button

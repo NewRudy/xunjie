@@ -1,16 +1,51 @@
 <script setup lang="ts">
 // 设备语义卡：左键点击设备后右侧滑出。
-// 字段全部来自 fixture；运行期数字（当日摘要）P2 引擎接入前一律"引擎未接入"。
+// 静态字段来自 fixture；运行区只显示后端任务联动状态（引擎/任务/回执），不再写"引擎未接入"。
 import { computed } from 'vue'
 import { selection, clearSelection } from '../state/selection'
 import { getCardInfo } from '../fixture/cards'
 import { getStatus } from '../state/parkState'
 import { STATUS_META, TRUTH_META } from '../constants/colors'
+import { missionStore } from '../agent/missionStore'
+import { fixture } from '../fixture'
 
 const card = computed(() => (selection.id ? getCardInfo(selection.id) : null))
 const status = computed(() => (selection.id ? getStatus(selection.id) : 'normal'))
 const statusMeta = computed(() => STATUS_META[status.value])
 const simulated = TRUTH_META.SIMULATED
+
+const PHASE_LABEL: Record<string, string> = {
+  created: '已创建',
+  'context-ready': '上下文就绪',
+  proposed: '已提案',
+  'awaiting-approval': '待审批',
+  executing: '执行中',
+  'awaiting-evidence': '待证据',
+  'awaiting-confirmation': '待确认',
+  resolved: '已闭环',
+  escalated: '已升级',
+  cancelled: '已取消',
+}
+
+const receipt = computed(() => missionStore.receipt)
+const task = computed(() => missionStore.inspectionTask)
+const evidenceCount = computed(() =>
+  Array.isArray(task.value?.evidence) ? task.value!.evidence!.length : null,
+)
+
+/** 演示目标（组串及其逆变器）在闭环后不再展示"正在故障"的静态 note */
+const isDemoTarget = computed(() => {
+  const id = selection.id
+  if (!id) return false
+  const s = fixture.strings.find((v) => v.id === fixture.demoAnomaly.targetStringId)
+  return id === fixture.demoAnomaly.targetStringId || id === s?.inverterId
+})
+const note = computed(() => {
+  if (isDemoTarget.value && receipt.value?.anomalyStatus === 'resolved') {
+    return `演示异常 ${fixture.demoAnomaly.id} 已闭环（数字现场仿真）：证据、累计损失与回执见巡界面板。`
+  }
+  return card.value?.note
+})
 </script>
 
 <template>
@@ -47,13 +82,26 @@ const simulated = TRUTH_META.SIMULATED
 
       <section class="daily">
         <div class="daily-title">
-          当日摘要
+          任务联动
           <em class="badge" :style="{ background: simulated.css }">{{ simulated.label }}</em>
         </div>
-        <div class="daily-body">引擎未接入（P2 阶段提供实发 / 应发 / 达成率等数据）</div>
+        <div v-if="missionStore.engine === 'offline'" class="daily-body">
+          引擎离线：无法获取任务状态
+        </div>
+        <div v-else-if="receipt" class="daily-body">
+          异常已闭环：任务 {{ receipt.taskId ?? '（未返回）' }}
+          <template v-if="receipt.taskStatus"> · {{ receipt.taskStatus }}</template>
+          <template v-if="evidenceCount !== null">；证据 {{ evidenceCount }} 件</template>
+        </div>
+        <div v-else-if="missionStore.mission" class="daily-body">
+          任务 {{ missionStore.mission.missionId }} ·
+          {{ PHASE_LABEL[missionStore.mission.phase] ?? missionStore.mission.phase }}
+          <template v-if="task?.status">；工单 {{ task.status }}</template>
+        </div>
+        <div v-else class="daily-body">等待任务：在巡界面板下达巡检任务后此处显示任务联动状态</div>
       </section>
 
-      <p v-if="card.note" class="note">{{ card.note }}</p>
+      <p v-if="note" class="note">{{ note }}</p>
     </aside>
   </transition>
 </template>

@@ -11,6 +11,7 @@ import { AvatarActor, avatarStore } from './avatar'
 import { executeAvatarCommands } from './avatarCommands'
 import { SCENE_ID, SCENE_REVISION, type AvatarCommand, type AvatarInterpretResult, type ResultEnvelope } from './types'
 import { fixture } from '../fixture'
+import { markDemoAnomalyFault } from '../state/parkState'
 
 let viewer: Cesium.Viewer | null = null
 let executor: PatrolExecutor | null = null
@@ -94,6 +95,7 @@ export async function createDemoMission(): Promise<void> {
   actor?.resetToOpsPoint()
   const reset = await guard(() => agentApi.resetDemo())
   if (!reset) return
+  markDemoAnomalyFault()
   log('演示复位完成：后端任务/异常/agent 数据已清空')
   return createMission('去看一下 B2 屋顶这个异常', fixture.demoAnomaly.id)
 }

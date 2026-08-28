@@ -212,3 +212,10 @@
 - 后端 Mission 快照补齐 `observationRefs/evidenceRefs/sourceRefs`，继续在顶层返回 `inspectionTask` 与 `receipt`；闭环卡展示工单/异常状态、证据数量与类型、完成时间及带 `SIMULATED` 标签的累计损失，不新增接口或虚构收益。
 - 语言启动演示前会调用既有 `/api/debug/reset`，清空上次任务并重新注入 demo 异常，同时把数字人重置到运维点；重复演示不再出现上次已消缺状态的历史 warning。
 - 验收证据：`agent-test` 72/72，前后端 TypeScript 检查通过；浏览器第二次完整跑通语言主链，最终显示 `TASK-DEMO-01 resolved`、`ANOM-DEMO-01 resolved`、3 件 photo/thermal/reading 仿真证据和闭环回执。
+
+### 2026-08-29 · 贵客松首屏与维修 wow moment 收口
+
+- 演示页顶层品牌调整为“巡界 XUNJIE · 设备超级巡检人 · 光伏数字现场”，隐藏未完成的大屏、集控中心、巡检和报告占位入口，只保留单一数字现场主链。
+- Agent 面板将八步计划默认折叠，首屏优先展示任务、建议/审批或闭环回执、研判依据；闭环后的上下文明示为“决策时快照”，避免其历史故障状态与当前恢复状态混淆。
+- 前端设备状态改为与后端回执一致：演示复位后 `STR-B2-07/INV-B-02` 恢复 fault，收到 `anomalyStatus=resolved` 回执后才变为 normal，三维颜色和设备卡同步；InfoCard 不再显示过时的“引擎未接入 P2”。维修动画本身不篡改任务状态。
+- 浏览器验收已连续通过：建议/审批首屏可见 → 两段路线到屋面 → 三类证据与闭环 → 设备卡恢复正常；随后语言指令“飞到 B2 逆变器维修 7 号异常组串”完整返回 navigate/focus/repair 三命令，人物进入 REPAIR、报警定位后正常恢复 IDLE。
