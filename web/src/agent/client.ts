@@ -2,8 +2,11 @@
 // 引擎地址通过 VITE_ENGINE_BASE_URL 配置，默认 http://localhost:8787。
 import type {
   ApprovalInput,
+  AvatarInterpretInput,
+  AvatarInterpretResult,
   CreateMissionInput,
   MissionResponse,
+  ResultEnvelope,
   SceneEvent,
 } from './types'
 
@@ -65,5 +68,12 @@ export const agentApi = {
       'POST',
       `/api/agent/missions/${encodeURIComponent(missionId)}/events`,
       event,
+    ),
+  /** 数字运维员自然语言解释（contracts/avatar-command.md §2） */
+  interpretAvatar: (input: AvatarInterpretInput) =>
+    request<AvatarInterpretResult | ResultEnvelope<AvatarInterpretResult>>(
+      'POST',
+      '/api/agent/avatar/interpret',
+      input,
     ),
 }

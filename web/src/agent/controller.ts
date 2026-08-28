@@ -7,16 +7,21 @@ import { applyResponse, log, missionStore, resetMission, setEngineOffline } from
 import { emitAssetFocused, emitEvidenceCaptured, emitSceneEntered, flushBufferedEvents } from './bridge'
 import { runSceneCommands } from './commands'
 import { PatrolExecutor } from './executor'
-import { SCENE_ID, SCENE_REVISION } from './types'
+import { AvatarActor, avatarStore } from './avatar'
+import { executeAvatarCommands } from './avatarCommands'
+import { SCENE_ID, SCENE_REVISION, type AvatarInterpretResult, type ResultEnvelope } from './types'
 import { fixture } from '../fixture'
 
 let viewer: Cesium.Viewer | null = null
 let executor: PatrolExecutor | null = null
+let actor: AvatarActor | null = null
 
-/** 场景初始化后调用：建执行器并发送一次 scene_entered */
+/** 场景初始化后调用：建数字运维员与执行器并发送一次 scene_entered */
 export function initAgent(v: Cesium.Viewer): void {
   viewer = v
-  executor = new PatrolExecutor(v)
+  actor = new AvatarActor(v)
+  actor.ensureEntity()
+  executor = new PatrolExecutor(v, actor)
   emitSceneEntered()
 }
 
@@ -116,7 +121,63 @@ export async function decide(decision: 'approve' | 'reject'): Promise<void> {
 }
 
 /**
- * 提交屋面证据：只发送结构化仿真证据引用（photo/thermal/reading），
+ * 数字运维员自然语言入口（contracts/avatar-command.md §2）。
+ * 只调用后端 /api/agent/avatar/interpret；前端不做任何本地自然语言猜测。
+ * 纯 avatar 控制：消费命令移动人物，但不创建/推进任何 mission，不上报到达事件。
+ */
+export async function sendAvatarText(text: string): Promise<void> {
+  if (!viewer || !actor) return
+  const input = text.trim()
+  if (!input) return
+  avatarStore.lastText = input
+  avatarStore.reply = ''
+  avatarStore.error = ''
+  avatarStore.lastCommands = []
+  log(`数字运维员指令：「${input}」→ POST /api/agent/avatar/interpret`)
+  let resp: AvatarInterpretResult | ResultEnvelope<AvatarInterpretResult>
+  try {
+    resp = await agentApi.interpretAvatar({ text: input, sceneId: SCENE_ID, sceneRevision: SCENE_REVISION })
+  } catch (e) {
+    if (e instanceof AgentApiError && e.status === null) {
+      avatarStore.error = `引擎不可达（${agentApi.baseUrl}），无法解释自然语言指令`
+      setEngineOffline(avatarStore.error)
+    } else if (e instanceof AgentApiError && e.status === 400) {
+      // CLARIFICATION_NEEDED：后端无法唯一理解，不猜目标
+      avatarStore.error = `需要澄清：${e.message}`
+    } else {
+      avatarStore.error = e instanceof Error ? e.message : String(e)
+    }
+    log(`指令失败：${avatarStore.error}`)
+    return
+  }
+
+  // 兼容直出与统一结果外壳两种返回
+  const outer = resp as ResultEnvelope<AvatarInterpretResult>
+  const data = (typeof outer?.status === 'string' && outer.data ? outer.data : resp) as AvatarInterpretResult
+  missionStore.engine = 'online'
+  const warnings = Array.isArray(outer?.warnings) ? outer.warnings : []
+  const truth = outer?.truth
+  avatarStore.reply = data?.reply ?? ''
+  if (truth && truth !== 'SIMULATED') {
+    log(`警告：interpret 响应 truth=${truth}，合同要求 SIMULATED`)
+  }
+  for (const w of warnings) log(`警告：${w}`)
+  const commands = Array.isArray(data?.commands) ? data.commands : []
+  avatarStore.lastCommands = commands.map((c) =>
+    'targetId' in c ? `${c.kind} → ${c.targetId}` : c.kind,
+  )
+  if (avatarStore.reply) log(`后端回复：${avatarStore.reply}`)
+  if (commands.length === 0) {
+    log('后端未签发任何命令')
+    return
+  }
+  // 新指令中断当前纯数字移动
+  actor.stop()
+  avatarStore.repair = null
+  await executeAvatarCommands(viewer, actor, commands)
+}
+
+/** 提交屋面证据：只发送结构化仿真证据引用（photo/thermal/reading），
  * 证据值与任务状态以后端响应为准；前端不把任务标为已闭环。
  */
 export async function submitRoofEvidence(): Promise<void> {

@@ -2,7 +2,10 @@
 // 错误格式与现有 API 一致：{ error: { code, message } } + 语义化状态码；成功走统一结果外壳。
 import { Hono } from 'hono';
 import { TransitionError } from '../inspection';
+import { nowIsoShanghai } from '../util';
 import { createMission, handleSceneEvent, RuntimeHttpError, submitApproval, getMission, envelope } from './runtime';
+import { SCENE_ID, SCENE_REVISION } from './context';
+import { AVATAR_WARNINGS, AvatarClarificationError, interpretAvatarCommand } from './avatar';
 import type { SceneEventInput } from './types';
 
 export const agentRoutes = new Hono();
@@ -36,6 +39,42 @@ agentRoutes.post('/missions', async (c) => {
     return c.json(envelope(res.mission), 201 as any);
   } catch (e) {
     return httpError(c, e);
+  }
+});
+
+// —— POST /api/agent/avatar/interpret：自然语言 → 受控数字人动作（contracts/avatar-command.md） ——
+// 确定性中文解析（无 LLM/密钥）；只读演示控制面，不改 MissionState 与任务闭环。
+agentRoutes.post('/avatar/interpret', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body.text !== 'string' || !body.text.trim() || typeof body.sceneId !== 'string' || typeof body.sceneRevision !== 'string') {
+    return err(c, 400, 'BAD_BODY', '入参须为 { text, sceneId, sceneRevision }');
+  }
+  if (body.sceneId !== SCENE_ID || body.sceneRevision !== SCENE_REVISION) {
+    return err(
+      c,
+      400,
+      'CLARIFICATION_NEEDED',
+      `场景须为 ${SCENE_ID}/${SCENE_REVISION}，收到: ${body.sceneId}/${body.sceneRevision}`,
+      { clarification: { field: body.sceneId !== SCENE_ID ? 'sceneId' : 'sceneRevision', options: [{ sceneId: SCENE_ID, sceneRevision: SCENE_REVISION }] } },
+    );
+  }
+  try {
+    const { normalizedText, reply, commands } = interpretAvatarCommand(body.text);
+    return c.json({
+      status: 'available' as const,
+      data: { normalizedText, reply, commands },
+      sourceRefs: ['contracts/avatar-command.md', 'data/fixtures/park-pecc-01.json'],
+      truth: 'SIMULATED' as const,
+      observedAt: nowIsoShanghai(),
+      warnings: [...AVATAR_WARNINGS],
+      nextAllowedActions: ['POST /api/agent/avatar/interpret {"text","sceneId","sceneRevision"}（继续下一条指令；任务闭环走 /missions，与本接口解耦）'],
+      planner: { mode: 'deterministic-fallback' as const, modelAvailable: false, reason: '确定性中文解析（Demo 稳定，无 LLM/密钥依赖）' },
+    });
+  } catch (e) {
+    if (e instanceof AvatarClarificationError) {
+      return err(c, 400, 'CLARIFICATION_NEEDED', e.message, { clarification: { message: e.message, examples: e.examples } });
+    }
+    throw e;
   }
 });
 

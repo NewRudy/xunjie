@@ -3,12 +3,29 @@
 // 所有数字与状态来自引擎 API；模型状态只显示后端显式声明，回退不伪称在线。
 import { computed, ref } from 'vue'
 import { missionStore } from '../agent/missionStore'
-import { createDemoMission, createMission, decide, submitRoofEvidence } from '../agent/controller'
+import { avatarStore } from '../agent/avatar'
+import { createDemoMission, createMission, decide, sendAvatarText, submitRoofEvidence } from '../agent/controller'
 import { TRUTH_META } from '../constants/colors'
 import { fixture } from '../fixture'
 
 const objective = ref('')
+const avatarText = ref('')
 const collapsed = ref(false)
+
+/** 一键示例：原样发送给后端 interpret，前端不做本地语义猜测 */
+const AVATAR_PRESETS = [
+  { label: '跑到 B2 楼前', text: '跑到 B2 楼前' },
+  { label: '飞到 B2 屋顶', text: '飞到 B2 屋顶' },
+  { label: '飞到设备并维修', text: '飞到 B2 逆变器维修 7 号异常组串' },
+  { label: '停下', text: '停下' },
+]
+
+function sendAvatar(text: string): void {
+  const t = text.trim()
+  if (!t) return
+  avatarText.value = ''
+  void sendAvatarText(t)
+}
 
 const AVAILABILITY_LABEL: Record<string, string> = {
   available: '可用',
@@ -66,6 +83,35 @@ function submit(): void {
     </header>
 
     <div v-show="!collapsed" class="body">
+      <p class="sim-banner">数字现场仿真，不控制真实设备</p>
+
+      <section class="avatar">
+        <div class="sec-title">
+          数字运维员（仿真）
+          <em class="motion" :data-m="avatarStore.motion">{{ avatarStore.motion }}</em>
+        </div>
+        <div class="btn-row presets">
+          <button v-for="p in AVATAR_PRESETS" :key="p.text" class="preset" @click="sendAvatar(p.text)">
+            {{ p.label }}
+          </button>
+        </div>
+        <input
+          v-model="avatarText"
+          class="avatar-input"
+          placeholder="对数字运维员说话，例如：向前跑 10 米 / 回运维点"
+          @keydown.enter.exact.prevent="sendAvatar(avatarText)"
+        />
+        <div v-if="avatarStore.reply" class="kv reply">后端回复：{{ avatarStore.reply }}</div>
+        <div v-if="avatarStore.lastCommands.length" class="kv cmds">
+          命令：{{ avatarStore.lastCommands.join('；') }}
+        </div>
+        <div v-if="avatarStore.error" class="error">{{ avatarStore.error }}</div>
+        <div v-if="avatarStore.repair" class="repair">
+          <div class="kv">维修仿真：{{ avatarStore.repair.targetId }} · {{ avatarStore.repair.phase }}</div>
+          <div class="bar"><i :style="{ width: avatarStore.repair.progress + '%' }"></i></div>
+        </div>
+      </section>
+
       <section class="status-row">
         <span class="pill" :class="missionStore.engine">{{ engineLabel }}</span>
         <span class="pill" :class="missionStore.modelMode">{{ modelLabel }}</span>
@@ -141,7 +187,7 @@ function submit(): void {
       <section class="evidence">
         <div class="sec-title">证据</div>
         <div class="kv">
-          数字运维员：
+          任务闭环执行器：
           <template v-if="missionStore.executorState === 'moving'">行进中（仿真）…</template>
           <template v-else-if="missionStore.arrivedCheckpointId">已到达 {{ missionStore.arrivedCheckpointId }}</template>
           <template v-else-if="missionStore.executorState === 'failed'">导航失败</template>
@@ -182,6 +228,93 @@ function submit(): void {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   font-size: 13px;
+}
+.sim-banner {
+  margin: 4px 0 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(249, 168, 37, 0.5);
+  border-radius: 6px;
+  background: rgba(249, 168, 37, 0.12);
+  color: #f9a825;
+  font-size: 12px;
+  text-align: center;
+}
+.avatar .sec-title {
+  display: flex;
+  align-items: center;
+}
+.motion {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: auto;
+  border-radius: 3px;
+  padding: 1px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #8fa3b5;
+  letter-spacing: 1px;
+}
+.motion[data-m='WALK'] {
+  background: rgba(76, 175, 80, 0.25);
+  color: #a5d6a7;
+}
+.motion[data-m='RUN'] {
+  background: rgba(0, 229, 255, 0.2);
+  color: #00e5ff;
+}
+.motion[data-m='FLY'] {
+  background: rgba(171, 71, 188, 0.3);
+  color: #ce93d8;
+}
+.motion[data-m='JUMP'] {
+  background: rgba(255, 179, 0, 0.25);
+  color: #ffb300;
+}
+.motion[data-m='REPAIR'] {
+  background: rgba(244, 67, 54, 0.25);
+  color: #ef9a9a;
+}
+.presets {
+  flex-wrap: wrap;
+}
+button.preset {
+  border-color: rgba(0, 229, 255, 0.4);
+  color: #b2ebf2;
+  font-size: 11px;
+  padding: 5px 9px;
+}
+.avatar-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #e8ecef;
+  padding: 7px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.reply {
+  color: #00e5ff;
+}
+.cmds {
+  font-family: monospace;
+  font-size: 11px;
+  color: #8fa3b5;
+}
+.repair .bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.repair .bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #f9a825, #00e5ff);
+  transition: width 0.25s;
 }
 .head {
   display: flex;

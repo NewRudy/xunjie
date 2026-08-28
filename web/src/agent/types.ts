@@ -160,6 +160,42 @@ export interface MissionResponse {
   [key: string]: unknown
 }
 
+// ---- 数字运维员指令（contracts/avatar-command.md §3，展示控制面，不篡改 MissionState） ----
+
+export type AvatarMovement = 'walk' | 'run' | 'fly'
+
+export type AvatarCommand =
+  | {
+      commandId: string
+      kind: 'navigate'
+      targetId: 'OPS-01' | 'CP-B02-FRONT' | 'CP-B02-ROOF' | 'CP-INV-B02'
+      movement: AvatarMovement
+    }
+  | {
+      commandId: string
+      kind: 'move_relative'
+      direction: 'forward' | 'backward' | 'left' | 'right' | 'up' | 'down'
+      distanceMeters: number
+      movement: AvatarMovement
+    }
+  | { commandId: string; kind: 'turn'; degrees: number }
+  | { commandId: string; kind: 'jump' }
+  | { commandId: string; kind: 'stop' }
+  | { commandId: string; kind: 'focus_asset'; targetId: 'STR-B2-07' | 'INV-B-02' }
+  | { commandId: string; kind: 'repair_simulation'; targetId: 'STR-B2-07'; checkpointId: 'CP-INV-B02' }
+
+export interface AvatarInterpretInput {
+  text: string
+  sceneId: string
+  sceneRevision: string
+}
+
+export interface AvatarInterpretResult {
+  normalizedText: string
+  reply: string
+  commands: AvatarCommand[]
+}
+
 export interface CreateMissionInput {
   objective: string
   sceneId: string

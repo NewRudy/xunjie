@@ -13,6 +13,7 @@
 | [agent-state.md](agent-state.md) | MissionState、提案、审批绑定、回放与现有巡检状态机的关系 | Agent 后端唯一写入方 |
 | [agent-tools.md](agent-tools.md) | 高层工具目录与 /api/agent/* HTTP 接口 | 前后端共同消费 |
 | [scene-events.md](scene-events.md) | Cesium 场景事件桥与后端场景命令 | 场景前端实现，后端校验 |
+| [avatar-command.md](avatar-command.md) | 数字运维员自然语言移动与维修仿真合同 | Kimi 前端执行，Claude 后端解释 |
 
 ## 不可违反的规则
 
