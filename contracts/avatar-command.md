@@ -58,7 +58,10 @@ type AvatarCommand =
   | { commandId: string; kind: 'jump' }
   | { commandId: string; kind: 'stop' }
   | { commandId: string; kind: 'focus_asset'; targetId: 'STR-B2-07' | 'INV-B-02' }
-  | { commandId: string; kind: 'repair_simulation'; targetId: 'STR-B2-07'; checkpointId: 'CP-INV-B02' };
+  | { commandId: string; kind: 'repair_simulation'; targetId: 'STR-B2-07'; checkpointId: 'CP-INV-B02' }
+  | { commandId: string; kind: 'start_inspection'; anomalyId: 'ANOM-DEMO-01' }
+  | { commandId: string; kind: 'decide_pending'; decision: 'approve' | 'reject' }
+  | { commandId: string; kind: 'capture_evidence'; evidenceKinds: ['photo', 'thermal', 'reading'] };
 ```
 
 约束：
@@ -68,6 +71,9 @@ type AvatarCommand =
 - `up/down` 必须使用 `movement: 'fly'`。
 - 新指令可以中断当前纯数字移动；`stop` 立即停止。
 - `repair_simulation` 必须确认人物已在目标检查点附近；否则前端先自动导航到 `checkpointId`。
+- `start_inspection` 只允许启动 fixture 登记的 `ANOM-DEMO-01`，由前端调用既有 `/missions`，不得在 avatar 接口内另造任务状态。
+- `decide_pending` 只是语言意图，前端必须读取当前唯一的 `pendingApproval`，继续调用既有审批接口并携带 `approvalId + contextVersion + planHash`；没有待审批项时拒绝执行。
+- `capture_evidence` 继续调用既有证据事件；人物未到屋面检查点或任务阶段不允许时拒绝执行。
 - 任务闭环已有 `/missions` 与审批接口保持不变；本接口是展厅演示控制面，不篡改 MissionState。
 
 ## 4. v1 中文映射
@@ -83,6 +89,10 @@ type AvatarCommand =
 - “跳一下” → `jump`
 - “停下” → `stop`
 - “维修/修复 7 号异常组串” → `navigate CP-INV-B02`（若尚未到位）+ `focus_asset STR-B2-07` + `repair_simulation STR-B2-07`
+- “检查/巡检 B2 屋顶异常” → `start_inspection ANOM-DEMO-01`
+- “我同意/批准” → `decide_pending approve`
+- “我不同意/拒绝” → `decide_pending reject`
+- “采集/提交证据” → `capture_evidence photo+thermal+reading`
 
 ## 5. 前端可见验收
 
@@ -97,3 +107,13 @@ type AvatarCommand =
 ## 6. 语音后接方式
 
 浏览器按住说话或服务端 ASR 得到最终转写后，只调用 `POST /api/agent/avatar/interpret`。因此本版文字入口就是语音链路除 ASR 外的完整可测替身。
+
+浏览器首版采用 Web Speech API（`zh-CN`）作为可选适配层：必须由用户点击后启动，显示听写状态和最终转写；浏览器不支持或权限失败时明确提示并保留文字输入。ASR 结果不得直接调用 Cesium 或绕过审批，仍先进入本合同的解释接口。
+
+## 7. 任务闭环语言验收
+
+1. “检查 B2 屋顶异常”创建现有异常任务并显示上下文与建议。
+2. “我同意”只批准当前唯一且未过期的提案，数字人按后端高层命令前往楼前和屋面。
+3. 到达屋面后说“采集证据”，提交 fixture 约定的 photo/thermal/reading 仿真证据。
+4. 再说“我同意”，使用新的闭环审批绑定完成任务；最终状态为 `resolved`。
+5. 任一步骤缺少任务、检查点或待审批项时，界面给出明确原因，不猜、不静默跳过。
