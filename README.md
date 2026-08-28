@@ -1,58 +1,126 @@
-# 黔光智维 PECC（Park Energy Control Center）
+# 巡界 XUNJIE · 设备超级巡检人
 
-园区版 evcc：园区发电管家。在一个虚构但物理自洽的贵阳贵安园区（1010kWp 屋顶光伏 + 储能 + 充电桩 + 两班制负荷）上，回答五个问题：
+贵客松赛道二「传统行业 AI 解决方案」之 AI × 能源（新能源场站运维）可运行 Demo。
 
-1. **发电咋样** — 今日实发/应发/达成率，损失在哪；
-2. **价格怎么走** — 贵州分时电价（黔发改价格〔2023〕481号）下的峰平谷；
-3. **该咋办** — 储能套利、充电桩转移、需量控制的策略卡，每张卡可手算复核；
-4. **现状有啥问题** — 发电异常检测（应发 vs 实发），损失折算成元/天；
-5. **去哪修 / 去哪装** — 异常触发小人巡检闭环（证据链 + 闭环后曲线恢复）；屋顶"去哪装"测算模块。
+运维人员用自然语言下达任务后，巡界会汇集异常、设备、空间、环境和 SOP 上下文，提出可追溯的现场检查建议；经用户授权，数字运维员在 Cesium 数字现场完成定位、巡检、取证和维修推演，最后生成闭环回执。
 
-## 铁律
+当前首版只打透一条光伏链路：
 
-- 数字只能来自确定性代码；大模型只做理解、研判与高层计划，输出必须经过语义 ID、证据要求和状态机校验；每条数字带真值标签（MEASURED/MODELED/SIMULATED/POLICY）。
-- 政策数字必须真实可点查文号；仿真数据必须标注。
-- 产品输入只用公开数据或用户自托管设备数据，不要私有单据。
-
-## 合同与记忆
-
-- `PROJECT_MEMORY.md` — 项目唯一事实来源（方向、决策、历史）。
-- `contracts/` — 共同合同：语义树、fixture、引擎接口、数据合同、验收矩阵。**开工前必读；改数据必改合同。**
-- `data/fixtures/park-pecc-01.json` — 园区 fixture（虚构，标注 fictional）。
-- `data/policy/` — 贵州政策包（按月版本化）。
-
-## 72 小时切片
-
-| 阶段 | 内容 | 验收 |
-|---|---|---|
-| P0 | 合同落盘 | contracts/acceptance-matrix.md §P0 |
-| P1 | 场景：Vue3 + CesiumJS，程序化园区 | §P1 |
-| P2 | 确定性引擎：气象/发电/负荷/电价/策略 | §P2 |
-| P3 | 集控中心 UI：能量流 + 时间轴 + 策略卡（evcc 风格，全中文） | §P3 |
-| P4 | 运维闭环：异常 → 小人巡检 → 证据 → 闭环恢复 | §P4 |
-| P5 | 月度报告 + 大屏 + 打磨 | §P5 |
-
-## 巡界 Agent 第一条纵向切片
-
-`巡界`是 PECC 的空间执行智能体层：用户下达任务后，后端按设备/场景/环境/SOP 装配有界上下文，生成结构化提案；用户明确同意后，前端只消费高层场景命令，真正到达检查点后回传事件，证据齐备并再次确认后闭环。
-
-当前可回放的演示链：`ANOM-DEMO-01` → `STR-B2-07` → `CP-B02-FRONT` → `CP-B02-ROOF` → photo/thermal/reading 仿真证据 → 人工确认 → `TASK-DEMO-01 resolved`。浏览器界面明确显示数字现场/仿真动作；未配置模型凭据时显示确定性回退。
-
-```bash
-# 终端 1
-cd engine && pnpm start
-# 终端 2
-cd web && pnpm dev
-# 后端 Agent 回放测试（临时 SQLite，不污染演示库）
-cd engine && pnpm test:agent
+```text
+ANOM-DEMO-01
+  → STR-B2-07 / INV-B-02
+  → CP-B02-FRONT
+  → CP-B02-ROOF
+  → photo / thermal / reading 仿真证据
+  → 人工确认
+  → TASK-DEMO-01 + anomaly resolved
 ```
 
-编排原则与上下文预算见 [`XUNJIE_AGENT_ORCHESTRATION.md`](XUNJIE_AGENT_ORCHESTRATION.md)；前后端共享合同见 [`contracts/`](contracts/)。
+## 快速启动
 
-## 分工
+打开两个终端：
 
-- **场景组**：P1 + P4 的三维部分。
-- **引擎数据组**：P2 + 政策包 + 仿真器。
-- **UI 报告组**：P3 + P5。
+```bash
+# 在仓库根目录分别打开两个终端
+# 终端 1：后端确定性引擎与 MissionRuntime
+cd engine
+pnpm install
+pnpm dev
 
-多模型并行时：同一合同、同一 fixture、同一验收矩阵；一个模型的产出未经验收不得成为另一个模型的事实基础。
+# 终端 2：Vue 3 + CesiumJS 数字现场
+cd web
+pnpm install
+pnpm dev
+```
+
+浏览器打开 [http://localhost:5173/](http://localhost:5173/)。后端默认监听 `http://localhost:8787`。
+
+如果依赖已经安装，直接执行两条 `pnpm dev` 即可。演示数据需要手动复位时：
+
+```bash
+curl -X POST http://localhost:8787/api/debug/reset
+```
+
+语言任务入口会在每次“检查 B2 屋顶异常”前自动复位 Demo，无需现场手动调用该接口。
+
+## 四句话跑通主链
+
+在左侧“对数字运维员说话”输入框依次输入，或在浏览器支持且已授权麦克风时点击语音：
+
+1. `检查 B2 屋顶异常`
+2. `我同意`
+3. 人物到达屋面、任务显示“待证据”后：`采集证据`
+4. 任务显示“待确认”后：`我同意`
+
+最终应看到：绿色闭环回执、3 件证据、工单与异常均为 `resolved`、完成时间、闭环时累计损失（`SIMULATED`）及来源，右侧 `STR-B2-07` 设备卡由“故障”恢复为“正常”。
+
+维修 wow moment 可单独输入：
+
+```text
+飞到 B2 逆变器维修 7 号异常组串
+```
+
+后端会签发 `navigate → focus_asset → repair_simulation` 三个受控命令，前端连续展示飞行定位、报警高亮、部件展开、维修进度和恢复。该过程是数字现场仿真，不写真实设备。
+
+## AI 与确定性程序的边界
+
+- 大模型适配器负责理解任务、选择高信号上下文并提出高层计划；模型输出必须经过已登记语义 ID、能力、证据和安全规则校验。
+- 路线、人物动作、任务状态、审批绑定、证据门槛和业务数字由确定性程序负责。模型不能逐帧控制人物，也不能直接写真实设备。
+- 审批绑定 `approvalId + contextVersion + planHash`；上下文变化、审批过期或证据不足时不能沿用“同意”。
+- 未配置模型凭据时，页面明确显示“模型不可用 · 确定性回退”。这不是在线 LLM 输出，但主链仍可稳定演示。
+- 语音是可选 Web Speech API 输入适配层；不支持、未授权或识别失败时保留同一文字入口。本仓库未替用户触发或接受麦克风权限。
+
+### 可选：接入现场真实模型
+
+后端已提供 OpenAI-compatible 适配器。若现场有 Kimi、智谱或其他兼容服务的临时凭据，可在启动后端的同一终端设置：
+
+```bash
+export AGENT_LLM_API_KEY='<临时密钥>'
+export AGENT_LLM_BASE_URL='<OpenAI-compatible API 根地址>'
+export AGENT_LLM_MODEL='<模型 ID>'
+pnpm dev
+```
+
+有效模型提案仍要通过语义 ID、数字溯源、证据和动作白名单校验；调用失败或校验不通过会显式回退。不要把密钥写入仓库、文档、日志或截图。当前仓库验收未使用用户模型凭据，因此默认截图是确定性回退态。
+
+## 当前已实现
+
+- Vue 3 + CesiumJS 程序化光伏园区，设备、异常、路线和检查点使用统一语义 ID。
+- 本地 CesiumMan GLB 数字运维员：走、跑、飞、相对移动、转向、跳跃、停止、第三人称跟随。
+- 设备聚焦与维修仿真：报警脉冲、部件展开、进度和外观恢复。
+- 任务上下文装配、结构化提案、绑定审批、SQLite 持久化、场景事件回流、证据门槛与闭环回执。
+- 异常/设备/环境/SOP 四类研判卡及 `SIMULATED / MODELED / POLICY` 真值标签。
+- 重复演示复位、设备卡/三维着色与后端闭环回执同步。
+
+## 最小验证
+
+```bash
+cd engine
+pnpm test:avatar   # 当前 66/66
+pnpm test:agent    # 当前 72/72
+npx tsc --noEmit
+
+cd ../web
+npx tsc --noEmit
+```
+
+最终浏览器验收应只跑一次主链，不在比赛现场执行长测试。
+
+## 数据与真实性
+
+- 场景坐标、设备运行、异常和证据是带标签的演示仿真；三维位置不是工程测量成果。
+- 环境上下文来自公开天气接口并标为模型数据；SOP 标为政策/规则依据。
+- 人物移动、取证和维修均不代表机器人或真实设备已执行物理操作。
+- 真实 PoC 的第一步是接入一个场站的一类高频告警、匿名 SCADA/告警导出、资产映射、现行 SOP 和历史工单，再用研判耗时、无效派工率、证据完整率、响应/修复时间和闭环率验证价值。
+
+人物模型许可与署名见 [`web/public/vendor/NOTICE.md`](web/public/vendor/NOTICE.md)。
+
+## 关键文档
+
+- [`SUBMISSION_ONE_PAGER.md`](SUBMISSION_ONE_PAGER.md)：一页作品说明。
+- [`DEMO_SCRIPT_90S.md`](DEMO_SCRIPT_90S.md)：90 秒演示与故障兜底。
+- [`NIGHT_RUN_PLAN.md`](NIGHT_RUN_PLAN.md)：本轮范围锁与验收检查点。
+- [`PROJECT_MEMORY.md`](PROJECT_MEMORY.md)：项目重大决策与真实性边界。
+- [`XUNJIE_PROJECT_BRIEF.md`](XUNJIE_PROJECT_BRIEF.md)：巡界产品定义。
+- [`XUNJIE_AGENT_ORCHESTRATION.md`](XUNJIE_AGENT_ORCHESTRATION.md)：上下文与工作流设计。
+- [`contracts/`](contracts/)：共同合同、fixture、状态机和验收矩阵。
