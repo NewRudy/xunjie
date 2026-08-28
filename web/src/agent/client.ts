@@ -69,6 +69,8 @@ export const agentApi = {
       `/api/agent/missions/${encodeURIComponent(missionId)}/events`,
       event,
     ),
+  /** 演示复位：清空后端巡检任务/异常/agent 数据（engine §附加路由） */
+  resetDemo: () => request<{ ok: boolean; note?: string }>('POST', '/api/debug/reset'),
   /** 数字运维员自然语言解释（contracts/avatar-command.md §2） */
   interpretAvatar: (input: AvatarInterpretInput) =>
     request<AvatarInterpretResult | ResultEnvelope<AvatarInterpretResult>>(

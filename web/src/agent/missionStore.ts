@@ -4,7 +4,9 @@ import { reactive } from 'vue'
 import type {
   Approval,
   ContextItem,
+  InspectionTaskView,
   MissionProposal,
+  MissionReceipt,
   MissionResponse,
   MissionState,
   ResultEnvelope,
@@ -35,6 +37,9 @@ export const missionStore = reactive({
   arrivedCheckpointId: null as string | null,
   /** 最近一次 evidence_captured 的后端响应（证据值/状态以后端为准） */
   lastEvidenceResult: null as unknown,
+  /** 后端快照顶层闭环回执与巡检任务（缺失即 null，不本地编造） */
+  receipt: null as MissionReceipt | null,
+  inspectionTask: null as InspectionTaskView | null,
   error: '',
  log: [] as LogEntry[],
 })
@@ -122,6 +127,8 @@ export function applyResponse(resp: MissionResponse | ResultEnvelope<MissionResp
  // pendingApproval 以后端为准；审批通过后后端应清空
  missionStore.pendingApproval = r.pendingApproval ?? r.mission?.pendingApproval ?? null
  if (Array.isArray(r.sceneCommands)) missionStore.sceneCommands = r.sceneCommands
+  if (r.receipt !== undefined) missionStore.receipt = r.receipt ?? null
+  if (r.inspectionTask !== undefined) missionStore.inspectionTask = r.inspectionTask ?? null
   // 模型在线/回退状态：只认后端显式声明
   const mode = r.model?.mode
   if (mode === 'online' || r.model?.online === true) {
@@ -151,6 +158,8 @@ export function resetMission(): void {
   missionStore.sceneCommands = []
   missionStore.arrivedCheckpointId = null
  missionStore.lastEvidenceResult = null
+  missionStore.receipt = null
+  missionStore.inspectionTask = null
  missionStore.executorState = 'idle'
   missionStore.log.splice(0)
   loggedWarnings.clear()

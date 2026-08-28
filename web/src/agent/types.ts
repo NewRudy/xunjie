@@ -143,6 +143,38 @@ export interface ResultEnvelope<T = unknown> {
   nextAllowedActions?: string[]
 }
 
+// ---- 巡检任务与闭环回执（后端快照顶层字段；缺失即不显示，前端不猜） ----
+
+export interface InspectionEvidenceView {
+  id?: string
+  checkpointId?: string
+  kind?: string
+  value?: string
+  ts?: string
+}
+
+export interface InspectionTaskView {
+  id?: string
+  anomalyId?: string
+  nodeId?: string
+  status?: string
+  createdAt?: string
+  closedAt?: string | null
+  evidence?: InspectionEvidenceView[]
+}
+
+export interface MissionReceipt {
+  kind?: string
+  taskId?: string
+  taskStatus?: string
+  closedAt?: string
+  anomalyId?: string
+  anomalyStatus?: string
+  lossKwhTotal?: number
+  truth?: string
+  sourceRefs?: string[]
+}
+
 // ---- 任务接口响应（直出或包一层外壳，两种都兼容） ----
 
 export interface MissionResponse {
@@ -153,6 +185,8 @@ export interface MissionResponse {
   pendingApproval?: Approval
   sceneCommands?: SceneCommand[]
   pendingCommands?: SceneCommand[]
+  receipt?: MissionReceipt
+  inspectionTask?: InspectionTaskView | null
   /** 模型在线/回退状态由后端显式给出，前端不得伪造 */
   model?: { mode?: string; online?: boolean; note?: string }
   planner?: { mode?: string; modelAvailable?: boolean; reason?: string }

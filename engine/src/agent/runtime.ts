@@ -53,6 +53,7 @@ function snapshotOf(m: MissionState): MissionSnapshot {
       objective: m.objective, trigger: m.trigger, operator: m.operator, phase: m.phase, focus: m.focus,
       anomalyId: m.anomalyId, nodeId: m.nodeId, inspectionTaskId: m.inspectionTaskId ?? null,
       contextVersion: m.contextVersion, contextHash: m.contextHash ?? null, warnings: m.warnings,
+      observationRefs: m.observationRefs, evidenceRefs: m.evidenceRefs, sourceRefs: m.sourceRefs,
       planner: m.planner, route: m.route, lastEvent: m.lastEvent ?? null, createdAt: m.createdAt, updatedAt: m.updatedAt,
     },
     context: { contextVersion: m.contextVersion, contextHash: m.contextHash ?? '', generatedAt: m.updatedAt, items: m.contextItems ?? [] },

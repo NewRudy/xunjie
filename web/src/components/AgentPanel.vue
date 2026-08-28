@@ -8,6 +8,7 @@ import { createDemoMission, createMission, decide, sendAvatarText, submitRoofEvi
 import { toggleVoice, voiceStatusLabel, voiceStore } from '../agent/voice'
 import { TRUTH_META } from '../constants/colors'
 import { fixture } from '../fixture'
+import type { ContextItem } from '../agent/types'
 
 const objective = ref('')
 const avatarText = ref('')
@@ -51,6 +52,41 @@ const PHASE_LABEL: Record<string, string> = {
 const engineLabel = computed(() =>
   missionStore.engine === 'online' ? '引擎在线' : missionStore.engine === 'offline' ? '引擎离线' : '引擎状态未知',
 )
+
+/** 四类高信号研判卡：按后端 context 的 scope 分组，不硬编码业务数字 */
+const SIGNAL_GROUPS: Array<{ title: string; scopes: ContextItem['scope'][] }> = [
+  { title: '异常', scopes: ['anomaly'] },
+  { title: '设备', scopes: ['asset', 'component'] },
+  { title: '环境', scopes: ['environment'] },
+  { title: 'SOP / 证据', scopes: ['sop', 'evidence'] },
+]
+const signalCards = computed(() =>
+  SIGNAL_GROUPS.map((g) => ({
+    title: g.title,
+    items: missionStore.context.filter((c) => g.scopes.includes(c.scope)),
+  })).filter((g) => g.items.length > 0),
+)
+
+/** 数据预览：只摘录后端 data 里的标量字段原值，不推断、不补全 */
+function dataPreview(c: ContextItem): string {
+  const d = c.data
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return ''
+  const parts: string[] = []
+  for (const [k, v] of Object.entries(d as Record<string, unknown>)) {
+    if (typeof v === 'number' || typeof v === 'boolean') parts.push(`${k}=${v}`)
+    else if (typeof v === 'string' && v.length > 0 && v.length <= 30) parts.push(`${k}=${v}`)
+    if (parts.length >= 4) break
+  }
+  return parts.join(' · ')
+}
+
+/** 闭环回执证据统计：只来自后端 inspectionTask.evidence */
+const receiptEvidence = computed(() => {
+  const ev = missionStore.inspectionTask?.evidence
+  if (!Array.isArray(ev)) return null
+  const kinds = [...new Set(ev.map((e) => e.kind).filter((k): k is string => typeof k === 'string'))]
+  return { count: ev.length, kinds }
+})
 const modelLabel = computed(() =>
   missionStore.modelMode === 'online'
     ? '模型在线'
@@ -165,16 +201,56 @@ function submit(): void {
         </ol>
       </section>
 
-      <section v-if="missionStore.context.length" class="context">
-        <div class="sec-title">上下文（{{ missionStore.context.length }}）</div>
-        <div v-for="c in missionStore.context" :key="c.key" class="ctx-item">
-          <span class="ctx-key">{{ c.key }}</span>
-          <span class="ctx-meta">
-            <em class="badge avail" :data-a="c.availability">{{ AVAILABILITY_LABEL[c.availability] ?? c.availability }}</em>
-            <em v-if="c.truth" class="badge" :style="{ background: truthCss(c.truth) }">{{ c.truth }}</em>
-            <span class="refs">来源 ×{{ c.sourceRefs.length }}</span>
-          </span>
+      <section v-if="missionStore.receipt" class="receipt">
+        <div class="sec-title">
+          ✅ 闭环回执
+          <em v-if="missionStore.receipt.truth" class="badge truth-tag" :style="{ background: truthCss(missionStore.receipt.truth) }">
+            {{ missionStore.receipt.truth }}
+          </em>
         </div>
+        <div v-if="missionStore.receipt.taskId" class="kv">
+          巡检任务：{{ missionStore.receipt.taskId }}
+          <template v-if="missionStore.receipt.taskStatus"> · {{ missionStore.receipt.taskStatus }}</template>
+        </div>
+        <div v-if="missionStore.receipt.anomalyId" class="kv">
+          异常：{{ missionStore.receipt.anomalyId }}
+          <template v-if="missionStore.receipt.anomalyStatus"> · {{ missionStore.receipt.anomalyStatus }}</template>
+        </div>
+        <div v-if="receiptEvidence" class="kv">
+          证据：{{ receiptEvidence.count }} 件
+          <template v-if="receiptEvidence.kinds.length">（{{ receiptEvidence.kinds.join('、') }}）</template>
+        </div>
+        <div v-if="missionStore.receipt.closedAt" class="kv">完成时间：{{ missionStore.receipt.closedAt }}</div>
+        <div v-if="typeof missionStore.receipt.lossKwhTotal === 'number'" class="kv">
+          闭环时累计损失：{{ missionStore.receipt.lossKwhTotal }} kWh
+        </div>
+      </section>
+
+      <section v-if="signalCards.length" class="signals">
+        <div class="sec-title">研判依据（{{ missionStore.context.length }} 项上下文）</div>
+        <div v-for="g in signalCards" :key="g.title" class="card">
+          <div class="card-title">{{ g.title }}</div>
+          <div v-for="c in g.items" :key="c.key" class="card-item">
+            <div class="card-line">{{ c.reasonIncluded || c.key }}</div>
+            <div v-if="dataPreview(c)" class="card-data">{{ dataPreview(c) }}</div>
+            <div class="card-meta">
+              <em class="badge avail" :data-a="c.availability">{{ AVAILABILITY_LABEL[c.availability] ?? c.availability }}</em>
+              <em v-if="c.truth" class="badge" :style="{ background: truthCss(c.truth) }">{{ c.truth }}</em>
+              <span class="refs">来源 ×{{ c.sourceRefs.length }}</span>
+            </div>
+          </div>
+        </div>
+        <details class="raw-ctx">
+          <summary>原始上下文（{{ missionStore.context.length }}）</summary>
+          <div v-for="c in missionStore.context" :key="c.key" class="ctx-item">
+            <span class="ctx-key">{{ c.key }}</span>
+            <span class="ctx-meta">
+              <em class="badge avail" :data-a="c.availability">{{ AVAILABILITY_LABEL[c.availability] ?? c.availability }}</em>
+              <em v-if="c.truth" class="badge" :style="{ background: truthCss(c.truth) }">{{ c.truth }}</em>
+              <span class="refs">来源 ×{{ c.sourceRefs.length }}</span>
+            </span>
+          </div>
+        </details>
       </section>
 
       <section v-if="missionStore.proposal" class="proposal">
@@ -512,6 +588,61 @@ section {
   gap: 8px;
   padding: 4px 0;
   border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+.receipt {
+  border: 1px solid rgba(76, 175, 80, 0.6);
+  border-radius: 6px;
+  background: rgba(76, 175, 80, 0.12);
+  padding: 8px 10px;
+}
+.receipt .sec-title {
+  color: #a5d6a7;
+}
+.truth-tag {
+  margin-left: 8px;
+}
+.card {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.card-title {
+  font-weight: 600;
+  color: #00e5ff;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.card-item {
+  padding: 3px 0;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+.card-item:first-of-type {
+  border-top: none;
+}
+.card-line {
+  color: #c7d2dc;
+}
+.card-data {
+  font-family: monospace;
+  font-size: 11px;
+  color: #8fa3b5;
+  word-break: break-all;
+}
+.card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.raw-ctx {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #8fa3b5;
+}
+.raw-ctx summary {
+  cursor: pointer;
 }
 .ctx-key {
   word-break: break-all;

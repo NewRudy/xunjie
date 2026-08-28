@@ -205,3 +205,10 @@
 - Kimi Code 在 `web/` 增加可选 Web Speech API 中文语音适配；最终转写复用文字入口，不支持或未授权麦克风时明确降级为文字。Claude Code 在 `engine/` 增加对应中文映射、澄清规则与最小测试。
 - 当前文字主链已在浏览器实跑通过：`检查 B2 屋顶异常 → 我同意 → CP-B02-FRONT → CP-B02-ROOF → 采集证据 → 我同意 → resolved`。后端 avatar 指令测试 66/66、前后端 TypeScript 检查通过；没有主动触发麦克风权限。
 - 下一演示缺口已锁定为两个：闭环回执需要醒目展示；重复演示前需要显式复位 demo 数据，避免已消缺异常产生历史状态提示。
+
+### 2026-08-29 · 研判依据与闭环回执可视化完成
+
+- 前端将原始上下文整理为异常、设备、环境、SOP/证据四类研判卡，展示后端原始字段、可用性、`SIMULATED/MODELED/POLICY` 与来源数量；原始 11～12 项上下文仍可折叠查看。未配置模型凭据时继续显示“确定性回退”，不伪称在线大模型结论。
+- 后端 Mission 快照补齐 `observationRefs/evidenceRefs/sourceRefs`，继续在顶层返回 `inspectionTask` 与 `receipt`；闭环卡展示工单/异常状态、证据数量与类型、完成时间及带 `SIMULATED` 标签的累计损失，不新增接口或虚构收益。
+- 语言启动演示前会调用既有 `/api/debug/reset`，清空上次任务并重新注入 demo 异常，同时把数字人重置到运维点；重复演示不再出现上次已消缺状态的历史 warning。
+- 验收证据：`agent-test` 72/72，前后端 TypeScript 检查通过；浏览器第二次完整跑通语言主链，最终显示 `TASK-DEMO-01 resolved`、`ANOM-DEMO-01 resolved`、3 件 photo/thermal/reading 仿真证据和闭环回执。

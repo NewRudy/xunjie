@@ -129,6 +129,17 @@ export class AvatarActor implements AvatarMotionController {
     if (avatarStore.motion !== 'REPAIR') avatarStore.motion = 'IDLE'
   }
 
+  /** 演示复位：回运维点、停止跟随与维修特效，保证每次演示从统一位置开始 */
+  resetToOpsPoint(): void {
+    if (avatarStore.motion === 'REPAIR') avatarStore.motion = 'IDLE'
+    this.stop()
+    this._pos = [...fixture.opsPoint.position]
+    this._headingDeg = 0
+    avatarStore.repair = null
+    if (this.viewer.trackedEntity === this.entity) this.viewer.trackedEntity = undefined
+    this.applyPose()
+  }
+
   /** 通用插值移动：travel/jump/turn 共用的逐帧驱动；被打断时静默 resolve */
   private drive(
     durationHint: (dt: number, t: number) => { done: boolean },

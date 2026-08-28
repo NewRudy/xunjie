@@ -260,6 +260,9 @@ section('场景事件：checkpoint/evidence 推进 + 幂等 + 安全阻塞');
   ok(closed.status === 200 && closed.json.data.mission.phase === 'resolved', '闭环确认 → mission resolved');
   const receipt = closed.json.data.receipt;
   ok(receipt?.closedAt && receipt.anomalyStatus === 'resolved' && typeof receipt.lossKwhTotal === 'number', `回执：closedAt + 损失固化 ${receipt?.lossKwhTotal} kWh`);
+  ok(closed.json.data.mission.evidenceRefs.length > 0, `mission.evidenceRefs 非空（${closed.json.data.mission.evidenceRefs.length} 条证据引用）`);
+  ok(receipt.taskStatus === 'resolved' && receipt.anomalyStatus === 'resolved' && receipt.truth === 'SIMULATED', '回执 taskStatus/anomalyStatus/truth 正确');
+  ok(closed.json.data.inspectionTask.evidence.length === 2 && closed.json.data.inspectionTask.evidence.some((e) => e.checkpointId.endsWith('-ROOF')), 'inspectionTask 证据在闭环响应中可见（含屋面证据）');
   ok(closed.json.data.inspectionTask.anomalyResolved === true, 'closeTask 撤销异常注入（anomalyResolved）');
 
   // 闭环恢复语义（P4-4）：实发回到 ±2%
@@ -340,6 +343,7 @@ section('重启恢复：独立进程重开同一 SQLite');
   ok(after.status === 200 && after.json.data.mission.phase === 'resolved', 'mission 状态从 SQLite 原样恢复（resolved）');
   ok(after.json.data.receipt?.closedAt && after.json.data.inspectionTask?.anomalyResolved === true, '回执与巡检任务恢复完整');
   ok(after.json.data.plan?.steps.length > 0 && after.json.data.context.items.length > 0, '计划/上下文快照随状态恢复');
+  ok(after.json.data.mission.observationRefs.includes(`inspection-task:${after.json.data.inspectionTask.id}`) && after.json.data.mission.evidenceRefs.length > 0 && after.json.data.mission.sourceRefs.length > 0, 'mission 引用字段 observationRefs/evidenceRefs/sourceRefs 随快照恢复');
   const t = await get(PORT, `/api/inspection/tasks/${after.json.data.inspectionTask.id}`);
   ok(t.status === 200 && t.json.transitions.length >= 6, '既有巡检任务读取：完整迁移时间线');
   const lateApprove = await post(PORT, `/api/agent/missions/${mid}/approval`, {

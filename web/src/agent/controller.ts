@@ -85,8 +85,16 @@ export async function createMission(objective: string, anomalyId?: string): Prom
   log(`任务已创建：${missionStore.mission?.missionId ?? '?'}，阶段 ${missionStore.mission?.phase ?? '?'}`)
 }
 
-/** 演示入口：检查 B2 屋顶异常（异常引用来自 fixture.demoAnomaly） */
-export function createDemoMission(): Promise<void> {
+/** 演示入口：检查 B2 屋顶异常（异常引用来自 fixture.demoAnomaly）。
+ *  先显式复位后端演示状态、取消当前执行、数字人回运维点，
+ *  避免重复演示带上一次 resolved 的历史 warning；通用 createMission 不复位。
+ */
+export async function createDemoMission(): Promise<void> {
+  executor?.cancel()
+  actor?.resetToOpsPoint()
+  const reset = await guard(() => agentApi.resetDemo())
+  if (!reset) return
+  log('演示复位完成：后端任务/异常/agent 数据已清空')
   return createMission('去看一下 B2 屋顶这个异常', fixture.demoAnomaly.id)
 }
 
