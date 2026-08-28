@@ -1,0 +1,65 @@
+{
+  "id": "gz-2026-08",
+  "region": "贵州省",
+  "month": "2026-08",
+  "truth": "POLICY",
+  "versionNote": "代理购电价为 2025-12 公告样本值；2026-08 当月公告值发布后须替换并 bump 月份版本（PoC 待办）",
+  "twoPartTariff": {
+    "kv10": { "energyYuanKwh": 0.1238, "demandYuanKwMonth": 35, "capacityYuanKvaMonth": 21.9 },
+    "kv35": { "energyYuanKwh": 0.1097, "demandYuanKwMonth": 33, "capacityYuanKvaMonth": 20.6 },
+    "effectiveFrom": "2026-08-01",
+    "policyRef": "黔发改价格〔2026〕421号"
+  },
+  "tou": {
+    "factors": { "peak": 1.6, "flat": 1.0, "valley": 0.4 },
+    "periods": {
+      "peak": [[10, 13], [17, 22]],
+      "flat": [[8, 10], [13, 17], [22, 24]],
+      "valley": [[0, 8]]
+    },
+    "floatBaseNote": "浮动基数 = 代理购电价 + 输配电价 + 线损及系统运行费",
+    "surchargeYuanKwh": 0.025325,
+    "surchargeNote": "基金及附加，不参与浮动",
+    "policyRef": "黔发改价格〔2023〕481号"
+  },
+  "proxyPurchasePrice": {
+    "valueYuanKwh": 0.388997,
+    "month": "2025-12",
+    "note": "贵州电网逐月代理购电公告样本值（2025-12）；逐月变动，当月值待替换",
+    "policyRef": "贵州电网代理购电月度公告"
+  },
+  "derived": {
+    "floatBaseYuanKwh": 0.536675,
+    "floatBaseCalc": "0.388997（代理购电） + 0.1238（10kV输配电价） + 0.023878（线损及系统运行费，由到户价回推） = 0.536675",
+    "flatYuanKwh": 0.562,
+    "peakYuanKwh": 0.884,
+    "valleyYuanKwh": 0.240,
+    "peakValleyDiffYuanKwh": 0.644,
+    "calcNote": "到户价 = 浮动基数 × 分时系数 + 基金附加0.025325：平=0.536675×1.0+0.025325=0.562；峰=×1.6=0.884；谷=×0.4=0.240"
+  },
+  "feedInReference": {
+    "valueYuanKwh": 0.388997,
+    "note": "136号文后上网电价全面市场化，无固定上网电价；PoC 阶段暂以代理购电价样本近似作为上网收益对照",
+    "policyRef": "发改价格〔2025〕136号（机制电价市场化）+ 贵州电网代理购电月度公告（样本值）"
+  },
+  "policyRefs": [
+    {
+      "id": "黔发改价格〔2026〕421号",
+      "title": "贵州省电网输配电价及两部制电价通知（题名以官方发布页为准）",
+      "excerpt": "两部制 10kV 电量电价 0.1238 元/kWh、需量电价 35 元/kW·月、容量电价 21.9 元/kVA·月；35kV 为 0.1097 / 33 / 20.6；2026-08-01 起执行",
+      "source": "贵州省发展改革委公开发布，PoC 政策包摘录（合同 data-contracts.md §2.3 已核实数字）"
+    },
+    {
+      "id": "黔发改价格〔2023〕481号",
+      "title": "贵州省完善峰谷分时电价机制通知（题名以官方发布页为准）",
+      "excerpt": "峰段电价=平段×1.6，谷段=平段×0.4；峰段 10-13、17-22 时，平段 8-10、13-17、22-24 时，谷段 0-8 时；浮动基数为代理购电价+输配电价+线损+系统运行费；基金及附加 0.025325 元/kWh 不参与浮动",
+      "source": "贵州省发展改革委公开发布，PoC 政策包摘录（合同 data-contracts.md §2.3 已核实数字）"
+    },
+    {
+      "id": "发改价格〔2025〕136号",
+      "title": "关于深化新能源上网电价市场化改革促进新能源高质量发展的通知",
+      "excerpt": "新能源上网电价全面市场化，存量/增量机制电价衔接（宏观背景，不进计算）",
+      "source": "国家发展改革委公开发布，叙事背景用"
+    }
+  ]
+}

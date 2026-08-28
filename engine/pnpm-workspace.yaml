@@ -1,0 +1,3 @@
+# engine 为独立包（不进仓库根 workspace）；允许 esbuild 安装脚本（放置平台二进制）
+allowBuilds:
+  esbuild: true

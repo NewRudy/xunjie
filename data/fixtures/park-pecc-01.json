@@ -1,0 +1,653 @@
+{
+  "id": "PARK-01",
+  "name": "黔光智维示范园区",
+  "fictional": true,
+  "prototypeNote": "虚构园区，原型参考贵阳贵安产业园形态；所有坐标为示意坐标",
+  "anchor": {
+    "lat": 26.4085,
+    "lon": 106.5225,
+    "altM": 1280
+  },
+  "gridConnection": {
+    "voltageKv": 10,
+    "mode": "自发自用余电上网",
+    "policyBasis": "分布式光伏发电开发建设管理办法（一般工商业）"
+  },
+  "buildings": [
+    {
+      "id": "BLDG-B01",
+      "name": "厂房A",
+      "center": [
+        60,
+        120,
+        0
+      ],
+      "size": [
+        80,
+        40
+      ],
+      "height": 12,
+      "floors": 1,
+      "kind": "factory",
+      "roofId": "RF-B01",
+      "subMeterId": "MT-B01",
+      "loadType": "production_2shift"
+    },
+    {
+      "id": "BLDG-B02",
+      "name": "厂房B",
+      "center": [
+        170,
+        120,
+        0
+      ],
+      "size": [
+        60,
+        36
+      ],
+      "height": 12,
+      "floors": 1,
+      "kind": "factory",
+      "roofId": "RF-B02",
+      "subMeterId": "MT-B02",
+      "loadType": "production_2shift"
+    },
+    {
+      "id": "BLDG-B03",
+      "name": "厂房C",
+      "center": [
+        60,
+        40,
+        0
+      ],
+      "size": [
+        50,
+        30
+      ],
+      "height": 10,
+      "floors": 1,
+      "kind": "factory",
+      "roofId": "RF-B03",
+      "subMeterId": "MT-B03",
+      "loadType": "production_2shift"
+    },
+    {
+      "id": "BLDG-B04",
+      "name": "办公楼",
+      "center": [
+        170,
+        30,
+        0
+      ],
+      "size": [
+        30,
+        15
+      ],
+      "height": 18,
+      "floors": 5,
+      "kind": "office",
+      "roofId": "RF-B04",
+      "subMeterId": "MT-B04",
+      "loadType": "office"
+    },
+    {
+      "id": "BLDG-B05",
+      "name": "宿舍食堂",
+      "center": [
+        220,
+        30,
+        0
+      ],
+      "size": [
+        25,
+        15
+      ],
+      "height": 10,
+      "floors": 3,
+      "kind": "dormitory",
+      "roofId": "RF-B05",
+      "subMeterId": "MT-B05",
+      "loadType": "dormitory"
+    },
+    {
+      "id": "BLDG-B06",
+      "name": "配电房",
+      "center": [
+        130,
+        75,
+        0
+      ],
+      "size": [
+        12,
+        8
+      ],
+      "height": 5,
+      "floors": 1,
+      "kind": "utility",
+      "roofId": "RF-B06",
+      "subMeterId": "MT-B06",
+      "loadType": "distribution"
+    }
+  ],
+  "roofs": [
+    {
+      "id": "RF-B01",
+      "buildingId": "BLDG-B01",
+      "tiltDeg": 5,
+      "azimuthDeg": 180,
+      "usableRatio": 0.6,
+      "pvArrayId": "PV-B01-A"
+    },
+    {
+      "id": "RF-B02",
+      "buildingId": "BLDG-B02",
+      "tiltDeg": 5,
+      "azimuthDeg": 180,
+      "usableRatio": 0.6,
+      "pvArrayId": "PV-B02-A"
+    },
+    {
+      "id": "RF-B03",
+      "buildingId": "BLDG-B03",
+      "tiltDeg": 5,
+      "azimuthDeg": 180,
+      "usableRatio": 0.6,
+      "pvArrayId": "PV-B03-A"
+    },
+    {
+      "id": "RF-B04",
+      "buildingId": "BLDG-B04",
+      "tiltDeg": 3,
+      "azimuthDeg": 180,
+      "usableRatio": 0.5,
+      "pvArrayId": null,
+      "expansionCandidate": true
+    },
+    {
+      "id": "RF-B05",
+      "buildingId": "BLDG-B05",
+      "tiltDeg": 3,
+      "azimuthDeg": 180,
+      "usableRatio": 0.5,
+      "pvArrayId": "PV-B05-A"
+    },
+    {
+      "id": "RF-B06",
+      "buildingId": "BLDG-B06",
+      "tiltDeg": 3,
+      "azimuthDeg": 180,
+      "usableRatio": 0.4,
+      "pvArrayId": null
+    }
+  ],
+  "pvArrays": [
+    {
+      "id": "PV-B01-A",
+      "roofId": "RF-B01",
+      "peakKwp": 400,
+      "panelCount": 728,
+      "tiltDeg": 5,
+      "azimuthDeg": 180,
+      "inverterIds": [
+        "INV-A-01",
+        "INV-A-02",
+        "INV-A-03"
+      ],
+      "commissionedAt": "2024-03-28"
+    },
+    {
+      "id": "PV-B02-A",
+      "roofId": "RF-B02",
+      "peakKwp": 250,
+      "panelCount": 455,
+      "tiltDeg": 5,
+      "azimuthDeg": 180,
+      "inverterIds": [
+        "INV-B-01",
+        "INV-B-02"
+      ],
+      "commissionedAt": "2024-03-28"
+    },
+    {
+      "id": "PV-B03-A",
+      "roofId": "RF-B03",
+      "peakKwp": 180,
+      "panelCount": 327,
+      "tiltDeg": 5,
+      "azimuthDeg": 180,
+      "inverterIds": [
+        "INV-C-01",
+        "INV-C-02"
+      ],
+      "commissionedAt": "2024-03-28"
+    },
+    {
+      "id": "PV-B05-A",
+      "roofId": "RF-B05",
+      "peakKwp": 60,
+      "panelCount": 109,
+      "tiltDeg": 3,
+      "azimuthDeg": 180,
+      "inverterIds": [
+        "INV-D-01"
+      ],
+      "commissionedAt": "2024-11-20"
+    },
+    {
+      "id": "PV-P01-A",
+      "carport": true,
+      "center": [
+        220,
+        110,
+        0
+      ],
+      "size": [
+        40,
+        12
+      ],
+      "peakKwp": 120,
+      "panelCount": 218,
+      "tiltDeg": 8,
+      "azimuthDeg": 180,
+      "inverterIds": [
+        "INV-P-01"
+      ],
+      "commissionedAt": "2024-11-20"
+    }
+  ],
+  "inverters": [
+    {
+      "id": "INV-A-01",
+      "pvArrayId": "PV-B01-A",
+      "model": "HUAWEI SUN2000-110KTL-M2",
+      "ratedKw": 110,
+      "stringCount": 18,
+      "position": [
+        96,
+        138,
+        11.5
+      ],
+      "efficiency": 0.986
+    },
+    {
+      "id": "INV-A-02",
+      "pvArrayId": "PV-B01-A",
+      "model": "HUAWEI SUN2000-110KTL-M2",
+      "ratedKw": 110,
+      "stringCount": 18,
+      "position": [
+        92,
+        138,
+        11.5
+      ],
+      "efficiency": 0.986
+    },
+    {
+      "id": "INV-A-03",
+      "pvArrayId": "PV-B01-A",
+      "model": "HUAWEI SUN2000-110KTL-M2",
+      "ratedKw": 110,
+      "stringCount": 18,
+      "position": [
+        88,
+        138,
+        11.5
+      ],
+      "efficiency": 0.986
+    },
+    {
+      "id": "INV-B-01",
+      "pvArrayId": "PV-B02-A",
+      "model": "HUAWEI SUN2000-110KTL-M2",
+      "ratedKw": 110,
+      "stringCount": 18,
+      "position": [
+        196,
+        136,
+        11.5
+      ],
+      "efficiency": 0.986
+    },
+    {
+      "id": "INV-B-02",
+      "pvArrayId": "PV-B02-A",
+      "model": "HUAWEI SUN2000-110KTL-M2",
+      "ratedKw": 110,
+      "stringCount": 18,
+      "position": [
+        192,
+        136,
+        11.5
+      ],
+      "efficiency": 0.986
+    },
+    {
+      "id": "INV-C-01",
+      "pvArrayId": "PV-B03-A",
+      "model": "HUAWEI SUN2000-100KTL-M2",
+      "ratedKw": 100,
+      "stringCount": 16,
+      "position": [
+        82,
+        53,
+        9.5
+      ],
+      "efficiency": 0.986
+    },
+    {
+      "id": "INV-C-02",
+      "pvArrayId": "PV-B03-A",
+      "model": "HUAWEI SUN2000-50KTL-M3",
+      "ratedKw": 50,
+      "stringCount": 8,
+      "position": [
+        78,
+        53,
+        9.5
+      ],
+      "efficiency": 0.986
+    },
+    {
+      "id": "INV-D-01",
+      "pvArrayId": "PV-B05-A",
+      "model": "HUAWEI SUN2000-50KTL-M3",
+      "ratedKw": 50,
+      "stringCount": 8,
+      "position": [
+        230,
+        36,
+        9.5
+      ],
+      "efficiency": 0.986
+    },
+    {
+      "id": "INV-P-01",
+      "pvArrayId": "PV-P01-A",
+      "model": "HUAWEI SUN2000-110KTL-M2",
+      "ratedKw": 110,
+      "stringCount": 14,
+      "position": [
+        206,
+        116,
+        3.2
+      ],
+      "efficiency": 0.986
+    }
+  ],
+  "strings": [
+    {
+      "id": "STR-B2-07",
+      "inverterId": "INV-B-02",
+      "panelCount": 26,
+      "note": "演示异常目标组串",
+      "ratedCurrentA": 13.2,
+      "ratedVoltageV": 1087
+    }
+  ],
+  "junctionBoxes": [
+    {
+      "id": "JBOX-B01",
+      "pvArrayId": "PV-B01-A",
+      "position": [
+        100,
+        138,
+        11.5
+      ]
+    },
+    {
+      "id": "JBOX-B02",
+      "pvArrayId": "PV-B02-A",
+      "position": [
+        200,
+        136,
+        11.5
+      ]
+    },
+    {
+      "id": "JBOX-B03",
+      "pvArrayId": "PV-B03-A",
+      "position": [
+        86,
+        53,
+        9.5
+      ]
+    }
+  ],
+  "ess": {
+    "id": "ESS-01",
+    "cabinets": [
+      {
+        "id": "ESS-01-C1",
+        "ratedKw": 200,
+        "capacityKwh": 430,
+        "position": [
+          118,
+          68,
+          0
+        ]
+      },
+      {
+        "id": "ESS-01-C2",
+        "ratedKw": 200,
+        "capacityKwh": 430,
+        "position": [
+          124,
+          68,
+          0
+        ]
+      }
+    ],
+    "totalRatedKw": 400,
+    "totalCapacityKwh": 860
+  },
+  "chargers": [
+    {
+      "id": "EV-01",
+      "ratedKw": 60,
+      "position": [
+        212,
+        100,
+        0
+      ]
+    },
+    {
+      "id": "EV-02",
+      "ratedKw": 60,
+      "position": [
+        218,
+        100,
+        0
+      ]
+    },
+    {
+      "id": "EV-03",
+      "ratedKw": 60,
+      "position": [
+        224,
+        100,
+        0
+      ]
+    },
+    {
+      "id": "EV-04",
+      "ratedKw": 60,
+      "position": [
+        230,
+        100,
+        0
+      ]
+    }
+  ],
+  "transformer": {
+    "id": "TR-01",
+    "capacityKva": 2000,
+    "note": "2×1000kVA 10/0.4kV",
+    "position": [
+      138,
+      75,
+      0
+    ]
+  },
+  "mainMeter": {
+    "id": "MT-01",
+    "position": [
+      130,
+      79,
+      2
+    ],
+    "note": "园区总表，正反向计量"
+  },
+  "subMeters": [
+    {
+      "id": "MT-B01",
+      "buildingId": "BLDG-B01",
+      "peakKw": 450
+    },
+    {
+      "id": "MT-B02",
+      "buildingId": "BLDG-B02",
+      "peakKw": 360
+    },
+    {
+      "id": "MT-B03",
+      "buildingId": "BLDG-B03",
+      "peakKw": 260
+    },
+    {
+      "id": "MT-B04",
+      "buildingId": "BLDG-B04",
+      "peakKw": 110
+    },
+    {
+      "id": "MT-B05",
+      "buildingId": "BLDG-B05",
+      "peakKw": 90
+    },
+    {
+      "id": "MT-B06",
+      "buildingId": "BLDG-B06",
+      "peakKw": 30
+    }
+  ],
+  "weatherStation": {
+    "id": "WS-01",
+    "position": [
+      145,
+      82,
+      0
+    ]
+  },
+  "opsPoint": {
+    "id": "OPS-01",
+    "name": "运维点",
+    "position": [
+      20,
+      90,
+      0
+    ]
+  },
+  "loadProfile": {
+    "maxDemandKw": 1500,
+    "annualKwh": 5200000,
+    "shiftPattern": "两班制 8:00-24:00",
+    "evFleet": {
+      "count": 4,
+      "arrivalHour": 9,
+      "departureHour": 17,
+      "dailyDemandKwhEach": [
+        40,
+        80
+      ]
+    }
+  },
+  "roads": [
+    {
+      "id": "ROAD-1",
+      "polyline": [
+        [
+          10,
+          90
+        ],
+        [
+          245,
+          90
+        ]
+      ]
+    },
+    {
+      "id": "ROAD-2",
+      "polyline": [
+        [
+          10,
+          90
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          245,
+          10
+        ],
+        [
+          245,
+          90
+        ]
+      ]
+    },
+    {
+      "id": "ROAD-3",
+      "polyline": [
+        [
+          110,
+          10
+        ],
+        [
+          110,
+          90
+        ]
+      ]
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "CP-B02-FRONT",
+      "nodeId": "BLDG-B02",
+      "kind": "building-front",
+      "position": [
+        170,
+        98,
+        0
+      ]
+    },
+    {
+      "id": "CP-B02-ROOF",
+      "nodeId": "PV-B02-A",
+      "kind": "roof",
+      "position": [
+        193,
+        124,
+        12
+      ]
+    },
+    {
+      "id": "CP-INV-B02",
+      "nodeId": "INV-B-02",
+      "kind": "device",
+      "position": [
+        192,
+        136,
+        11.5
+      ]
+    }
+  ],
+  "demoAnomaly": {
+    "id": "ANOM-DEMO-01",
+    "targetStringId": "STR-B2-07",
+    "type": "string-undercurrent",
+    "magnitude": -0.18,
+    "suspected": "旁路二极管击穿/热斑",
+    "taskId": "TASK-DEMO-01",
+    "note": "演示日 T0 起注入；消缺确认后仿真器恢复正常出力"
+  }
+}

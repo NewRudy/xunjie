@@ -1,0 +1,25 @@
+{
+  "name": "pecc-engine",
+  "private": true,
+  "version": "0.2.0",
+  "description": "PECC 确定性计算引擎（P2）：气象/发电/负荷/电价/策略/巡检闭环，全部数字唯一来源",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "smoke": "node scripts/smoke.mjs",
+    "test:agent": "node scripts/agent-test.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}
