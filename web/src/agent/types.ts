@@ -183,6 +183,10 @@ export type AvatarCommand =
   | { commandId: string; kind: 'stop' }
   | { commandId: string; kind: 'focus_asset'; targetId: 'STR-B2-07' | 'INV-B-02' }
   | { commandId: string; kind: 'repair_simulation'; targetId: 'STR-B2-07'; checkpointId: 'CP-INV-B02' }
+  // 任务闭环命令（§3/§7）：不进纯场景执行器，由 controller 复用既有任务/审批/证据链路
+  | { commandId: string; kind: 'start_inspection'; anomalyId: 'ANOM-DEMO-01' }
+  | { commandId: string; kind: 'decide_pending'; decision: 'approve' | 'reject' }
+  | { commandId: string; kind: 'capture_evidence'; evidenceKinds: ['photo', 'thermal', 'reading'] }
 
 export interface AvatarInterpretInput {
   text: string

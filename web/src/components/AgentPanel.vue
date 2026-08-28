@@ -5,6 +5,7 @@ import { computed, ref } from 'vue'
 import { missionStore } from '../agent/missionStore'
 import { avatarStore } from '../agent/avatar'
 import { createDemoMission, createMission, decide, sendAvatarText, submitRoofEvidence } from '../agent/controller'
+import { toggleVoice, voiceStatusLabel, voiceStore } from '../agent/voice'
 import { TRUTH_META } from '../constants/colors'
 import { fixture } from '../fixture'
 
@@ -101,6 +102,19 @@ function submit(): void {
           placeholder="对数字运维员说话，例如：向前跑 10 米 / 回运维点"
           @keydown.enter.exact.prevent="sendAvatar(avatarText)"
         />
+        <div class="btn-row voice-row">
+          <button
+            class="voice-btn"
+            :class="{ live: voiceStore.status === 'listening' || voiceStore.status === 'recognizing' }"
+            :disabled="voiceStore.status === 'unsupported'"
+            @click="toggleVoice"
+          >
+            {{ voiceStore.status === 'listening' || voiceStore.status === 'recognizing' ? '停止语音' : '开始语音' }}
+          </button>
+          <span class="voice-status" :data-s="voiceStore.status">{{ voiceStatusLabel() }}</span>
+        </div>
+        <div v-if="voiceStore.transcript" class="kv cmds">最终转写：{{ voiceStore.transcript }}</div>
+        <div v-if="voiceStore.error" class="error">{{ voiceStore.error }}</div>
         <div v-if="avatarStore.reply" class="kv reply">后端回复：{{ avatarStore.reply }}</div>
         <div v-if="avatarStore.lastCommands.length" class="kv cmds">
           命令：{{ avatarStore.lastCommands.join('；') }}
@@ -297,6 +311,30 @@ button.preset {
 }
 .reply {
   color: #00e5ff;
+}
+.voice-row {
+  align-items: center;
+}
+button.voice-btn {
+  border-color: rgba(0, 229, 255, 0.5);
+  color: #00e5ff;
+}
+button.voice-btn.live {
+  background: rgba(244, 67, 54, 0.25);
+  border-color: rgba(244, 67, 54, 0.6);
+  color: #ef9a9a;
+}
+.voice-status {
+  font-size: 11px;
+  color: #8fa3b5;
+}
+.voice-status[data-s='listening'],
+.voice-status[data-s='recognizing'] {
+  color: #00e5ff;
+}
+.voice-status[data-s='unsupported'],
+.voice-status[data-s='error'] {
+  color: #e57373;
 }
 .cmds {
   font-family: monospace;

@@ -2,6 +2,8 @@
 // 数字运维员指令解析测试（engine/scripts/avatar-test.mjs）
 // 覆盖 contracts/avatar-command.md §4 映射：跑到 B2 楼前、飞到 B2 屋顶、向前走 10 米、左转 90 度、
 //       停下、维修 7 号异常组串（含飞屋顶复合句）、未知指令澄清、钳制与 commandId 唯一性；
+//       任务闭环三意图：检查/巡检/排查 → start_inspection、我同意/不同意（负向优先）→ decide_pending、
+//       采集/提交证据/拍照取证 → capture_evidence（§7）；
 //       并经 Hono 路由冒烟验证统一外壳（truth=SIMULATED + 仿真告警）与 400 CLARIFICATION_NEEDED。
 // 用法：pnpm test:avatar（= tsx scripts/avatar-test.mjs，退出码 0=全绿）
 import os from 'node:os';
@@ -93,6 +95,48 @@ section('维修 7 号异常组串');
 
   const interp = interpretAvatarCommand('飞到 B2 屋顶维修 7 号异常组串');
   ok(typeof interp.reply === 'string' && interp.reply.includes('B2 屋顶') && interp.reply.includes('维修仿真'), 'reply 面向观众可读', interp.reply);
+}
+
+// ---------- 任务闭环三意图（合同 §4 新增 + §7：巡检 / 审批意图 / 采证） ----------
+section('任务闭环：start_inspection / decide_pending / capture_evidence');
+{
+  for (const t of ['检查 B2 屋顶异常', '巡检 B2 屋顶异常', '排查 7 号异常组串']) {
+    const insp = parseAvatarCommand(t);
+    ok(insp.length === 1 && insp[0].kind === 'start_inspection' && insp[0].anomalyId === 'ANOM-DEMO-01', `「${t}」→ start_inspection ANOM-DEMO-01（唯一）`, JSON.stringify(insp));
+  }
+  try {
+    parseAvatarCommand('检查 8 号组串');
+    ok(false, '「检查 8 号组串」应抛澄清（编号未登记）');
+  } catch (e) {
+    ok(e instanceof AvatarClarificationError, '「检查 8 号组串」→ 澄清（仅登记 ANOM-DEMO-01）', e.message);
+  }
+
+  for (const t of ['我同意', '同意', '批准', '执行']) {
+    const cmd = parseAvatarCommand(t);
+    ok(cmd.length === 1 && cmd[0].kind === 'decide_pending' && cmd[0].decision === 'approve', `「${t}」→ decide_pending approve`, JSON.stringify(cmd));
+  }
+  // 负向优先：「我不同意」含「同意」，不得误判为 approve
+  for (const [t, why] of [['我不同意', '负向优先'], ['不同意', '负向优先'], ['拒绝', '负向优先'], ['取消', '负向优先']]) {
+    const cmd = parseAvatarCommand(t);
+    ok(cmd.length === 1 && cmd[0].kind === 'decide_pending' && cmd[0].decision === 'reject', `「${t}」→ decide_pending reject（${why}）`, JSON.stringify(cmd));
+  }
+
+  for (const t of ['采集证据', '提交证据', '拍照取证']) {
+    const ev = parseAvatarCommand(t);
+    ok(ev.length === 1 && ev[0].kind === 'capture_evidence' && JSON.stringify(ev[0].evidenceKinds) === JSON.stringify(['photo', 'thermal', 'reading']), `「${t}」→ capture_evidence photo+thermal+reading`, JSON.stringify(ev));
+  }
+
+  // 命令唯一性 + commandId 唯一；reply 只说「将…」的下一步，不声称已执行
+  for (const t of ['检查 B2 屋顶异常', '我同意', '我不同意', '采集证据']) {
+    const cmds = parseAvatarCommand(t);
+    ok(cmds.length === 1 && new Set(cmds.map((c) => c.commandId)).size === 1, `「${t}」恰一个受控意图且 commandId 唯一`, JSON.stringify(cmds));
+    const reply = interpretAvatarCommand(t).reply;
+    ok(reply.includes('将') && !/已(批准|驳回|创建|采集|完成)/.test(reply), `「${t}」reply 指向下一步、不声称已执行`, reply);
+  }
+
+  // 不触碰 MissionState：解析只返回意图命令，无任务/审批副作用字段
+  const insp = parseAvatarCommand('检查 B2 屋顶异常')[0];
+  ok(Object.keys(insp).filter((k) => !['commandId', 'kind', 'anomalyId'].includes(k)).length === 0, 'start_inspection 仅含受控字段', JSON.stringify(insp));
 }
 
 // ---------- 钳制与默认值 ----------

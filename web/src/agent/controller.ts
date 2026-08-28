@@ -9,7 +9,7 @@ import { runSceneCommands } from './commands'
 import { PatrolExecutor } from './executor'
 import { AvatarActor, avatarStore } from './avatar'
 import { executeAvatarCommands } from './avatarCommands'
-import { SCENE_ID, SCENE_REVISION, type AvatarInterpretResult, type ResultEnvelope } from './types'
+import { SCENE_ID, SCENE_REVISION, type AvatarCommand, type AvatarInterpretResult, type ResultEnvelope } from './types'
 import { fixture } from '../fixture'
 
 let viewer: Cesium.Viewer | null = null
@@ -171,10 +171,72 @@ export async function sendAvatarText(text: string): Promise<void> {
     log('后端未签发任何命令')
     return
   }
-  // 新指令中断当前纯数字移动
-  actor.stop()
-  avatarStore.repair = null
-  await executeAvatarCommands(viewer, actor, commands)
+  // 按合同 §3 分流：任务闭环命令复用既有任务/审批/证据链路，
+  // 不进纯场景执行器；移动/维修等纯场景命令仍走 executeAvatarCommands。
+  const sceneCommands = commands.filter((c) => !isClosedLoopCommand(c))
+  if (sceneCommands.length > 0) {
+    actor.stop()
+    avatarStore.repair = null
+  }
+  for (const cmd of commands) {
+    if (isClosedLoopCommand(cmd)) {
+      await runClosedLoopCommand(cmd)
+    } else {
+      await executeAvatarCommands(viewer, actor, [cmd])
+    }
+  }
+}
+
+/** 任务闭环语言命令（合同 §3 新增三类） */
+function isClosedLoopCommand(
+  cmd: AvatarCommand,
+): cmd is Extract<AvatarCommand, { kind: 'start_inspection' | 'decide_pending' | 'capture_evidence' }> {
+  return cmd.kind === 'start_inspection' || cmd.kind === 'decide_pending' || cmd.kind === 'capture_evidence'
+}
+
+/** 闭环命令执行：每一步缺少前置状态时给出明确原因，不猜、不静默跳过 */
+async function runClosedLoopCommand(
+  cmd: Extract<AvatarCommand, { kind: 'start_inspection' | 'decide_pending' | 'capture_evidence' }>,
+): Promise<void> {
+  switch (cmd.kind) {
+    case 'start_inspection':
+      if (cmd.anomalyId !== fixture.demoAnomaly.id) {
+        avatarStore.error = `拒绝执行：异常 ${cmd.anomalyId} 未在 fixture 登记`
+        log(avatarStore.error)
+        return
+      }
+      log('指令：启动检查任务（复用既有任务创建链路）')
+      await createDemoMission()
+      return
+    case 'decide_pending':
+      if (!missionStore.mission || !missionStore.pendingApproval) {
+        avatarStore.error = '拒绝执行：当前没有待审批项，请先创建任务并等待提案'
+        log(avatarStore.error)
+        return
+      }
+      await decide(cmd.decision)
+      return
+    case 'capture_evidence': {
+      if (!missionStore.mission) {
+        avatarStore.error = '拒绝执行：当前没有任务，无法采集证据'
+        log(avatarStore.error)
+        return
+      }
+      const checkpoint = fixture.checkpoints.find((c) => c.id === missionStore.arrivedCheckpointId)
+      if (checkpoint?.kind !== 'roof') {
+        avatarStore.error = '拒绝执行：数字运维员尚未到达屋面检查点'
+        log(avatarStore.error)
+        return
+      }
+      if (missionStore.mission.phase !== 'awaiting-evidence') {
+        avatarStore.error = `拒绝执行：任务当前阶段为 ${missionStore.mission.phase}，不允许提交证据`
+        log(avatarStore.error)
+        return
+      }
+      await submitRoofEvidence()
+      return
+    }
+  }
 }
 
 /** 提交屋面证据：只发送结构化仿真证据引用（photo/thermal/reading），

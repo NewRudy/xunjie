@@ -14,7 +14,10 @@ export type AvatarCommand =
   | { commandId: string; kind: 'jump' }
   | { commandId: string; kind: 'stop' }
   | { commandId: string; kind: 'focus_asset'; targetId: 'STR-B2-07' | 'INV-B-02' }
-  | { commandId: string; kind: 'repair_simulation'; targetId: 'STR-B2-07'; checkpointId: 'CP-INV-B02' };
+  | { commandId: string; kind: 'repair_simulation'; targetId: 'STR-B2-07'; checkpointId: 'CP-INV-B02' }
+  | { commandId: string; kind: 'start_inspection'; anomalyId: 'ANOM-DEMO-01' }
+  | { commandId: string; kind: 'decide_pending'; decision: 'approve' | 'reject' }
+  | { commandId: string; kind: 'capture_evidence'; evidenceKinds: ['photo', 'thermal', 'reading'] };
 
 export interface AvatarInterpretation {
   normalizedText: string;
@@ -43,6 +46,10 @@ export const AVATAR_EXAMPLES = [
   '跳一下',
   '停下',
   '维修 7 号异常组串',
+  '检查 B2 屋顶异常',
+  '我同意',
+  '我不同意',
+  '采集证据',
 ];
 
 // —— 澄清错误（路由层映射 400 CLARIFICATION_NEEDED，不猜目标） ——
@@ -116,6 +123,11 @@ const RE = {
   run: /跑/,
   stop: /停下|停止|站住|暂停|别动|停一下/,
   jump: /跳一下|跳一跳|跳跃/,
+  inspection: /检查|巡检|排查/,
+  decideApprove: /同意|批准|赞同|执行/,
+  // 负向优先：「不同意」包含「同意」，必须先判负向，避免误判为 approve
+  decideReject: /不同意|不批准|不赞同|拒绝|取消/,
+  evidence: /采集证据|提交证据|拍照取证|取证|拍照|采集/,
 } as const;
 
 const TARGET_LABEL: Record<AvatarTargetId, string> = {
@@ -159,6 +171,28 @@ function parseRepair(text: string): AvatarCommand[] | null {
   cmds.push({ kind: 'focus_asset', targetId: 'STR-B2-07' });
   cmds.push({ kind: 'repair_simulation', targetId: 'STR-B2-07', checkpointId: 'CP-INV-B02' });
   return withIds(cmds);
+}
+
+/** 巡检意图：fixture 唯一登记异常 ANOM-DEMO-01，其他编号不猜（合同 §3：不在本接口内另造任务状态） */
+function parseInspection(text: string): AvatarCommand[] | null {
+  if (!RE.inspection.test(text)) return null;
+  if (RE.stringOtherNo.test(text) && !RE.string7.test(text)) {
+    clarify('巡检目标不明确：本场景仅登记 ANOM-DEMO-01（B2 屋顶 7 号异常组串），请说「检查 B2 屋顶异常」，不猜测其他编号');
+  }
+  return withIds([{ kind: 'start_inspection', anomalyId: 'ANOM-DEMO-01' }]);
+}
+
+/** 审批意图：只返回语言意图，执行与否由前端读 pendingApproval 调既有审批接口（合同 §3）；负向优先 */
+function parseDecision(text: string): AvatarCommand[] | null {
+  if (RE.decideReject.test(text)) return withIds([{ kind: 'decide_pending', decision: 'reject' }]);
+  if (RE.decideApprove.test(text)) return withIds([{ kind: 'decide_pending', decision: 'approve' }]);
+  return null;
+}
+
+/** 采证意图：证据类型固定 photo/thermal/reading（fixture 约定），是否允许由前端按任务阶段校验 */
+function parseEvidence(text: string): AvatarCommand[] | null {
+  if (!RE.evidence.test(text)) return null;
+  return withIds([{ kind: 'capture_evidence', evidenceKinds: ['photo', 'thermal', 'reading'] }]);
 }
 
 function parseNavigate(text: string): AvatarCommand[] | null {
@@ -222,6 +256,16 @@ function parseSimple(text: string): AvatarCommand[] | null {
 function parseSingle(text: string): AvatarCommand[] | null {
   const repair = parseRepair(text);
   if (repair) return repair;
+
+  // 任务闭环三意图（巡检/审批/采证）先于导航判定：「检查 B2 屋顶异常」含「屋顶」不得误判为 navigate
+  const inspection = parseInspection(text);
+  if (inspection) return inspection;
+
+  const decision = parseDecision(text);
+  if (decision) return decision;
+
+  const evidence = parseEvidence(text);
+  if (evidence) return evidence;
 
   const nav = parseNavigate(text);
   const simple = parseSimple(text);
@@ -289,6 +333,14 @@ function buildReply(commands: AvatarCommand[]): string {
         ? '收到，飞往 B2 屋顶，随后按安全落点（B2 逆变器检查点）执行 7 号异常组串维修仿真。'
         : '收到，前往 B2 逆变器并执行 7 号异常组串维修仿真。';
     }
+    case 'start_inspection':
+      return '收到，将创建 B2 屋顶异常巡检任务（ANOM-DEMO-01）；请看任务面板确认上下文与建议。';
+    case 'decide_pending':
+      return last.decision === 'approve'
+        ? '收到，将批准当前待审批方案；审批结果请以任务面板状态为准。'
+        : '收到，将驳回当前待审批方案；审批结果请以任务面板状态为准。';
+    case 'capture_evidence':
+      return '收到，将采集照片、红外、读数三类仿真证据；请确保人物已在屋面检查点且任务阶段允许。';
     default:
       return '收到。';
   }
