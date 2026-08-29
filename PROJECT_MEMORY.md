@@ -311,3 +311,4 @@
 - **播报规则改版**：原「仅 sceneBrief 问答播报」导致光伏导航类回复全静默 → 三场景（wind/hydro/solar）统一改为**有 reply 就播报**（浏览器本地 TTS）。
 - **光伏跳/飞恢复**：子代理初版按"平地走查"禁了 Space 跳/F 飞（keyMap null + jump 命令拒绝），用户要求恢复——删 keyMap 覆盖、补 makeJump、键位提示改回全套。
 - 待办：光伏模型许可回源确认；contracts/avatar-command.md §3 登记清单同步 CP-STR；部署链接。
+- **彩蛋「牛来」**：`player-demo/example/public/glb/niulai.glb`（58MB，无骨骼无动画，局部 1m 高 Y-up）。三场景页统一：对话/语音含「牛来」→ `player.switchPlayerModel` 换牛来（scale 同默认 0.01 → 速度/重力/相机比例 ratio=1 不动；动画字段全部显式 undefined 防止 Cesium DeveloperError）；「换回来」恢复默认数字人。调试钩子 `window.__xjNiulai(bool)`。部署包 docs/ 已含此模型（重建于 01:11）。
