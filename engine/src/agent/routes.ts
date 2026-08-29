@@ -134,6 +134,7 @@ agentRoutes.post('/avatar/dispatch', async (c) => {
         mission: missionEnvelope ? missionEnvelope.data : null,
         conversationId: res.conversationId,
         trace: res.trace,
+        ...(res.sceneBrief ? { sceneBrief: res.sceneBrief } : {}),
       },
       sourceRefs: ['contracts/avatar-command.md', AVATAR_SCENES[body.sceneId].sourceRef, ...(res.mission ? [`/api/agent/missions/${res.mission.missionId}`] : [])],
       truth: 'SIMULATED' as const,

@@ -314,8 +314,8 @@ function parseTurn(text: string): AvatarCommand[] | null {
   const degMatch = text.match(RE.degrees);
   const requested = degMatch ? Number.parseFloat(degMatch[1]) : 90;
   if (!Number.isFinite(requested)) clarify(`角度无法解析：「${text}」，例如「左转 90 度」`);
-  // 约定：左转=逆时针=正角度，右转=负角度（转身/掉头=180）
-  const sign = isLeft ? 1 : isRight ? -1 : 1;
+  // 约定：左转=-角度 / 右转=+角度（人物渲染器 addYaw 顺时针为正，左转必须为负；转身/掉头=180 不受符号影响）
+  const sign = isLeft ? -1 : isRight ? 1 : 1;
   const degrees = clampNum(Math.abs(requested) * sign, DEG_MIN, DEG_MAX);
   return withIds([{ kind: 'turn', degrees }]);
 }
@@ -498,7 +498,8 @@ export function buildReply(commands: AvatarCommand[]): string {
       return `收到，向${dirLabel}${MOVE_VERB[last.movement]} ${last.distanceMeters} 米。`;
     }
     case 'turn': {
-      const dir = last.degrees >= 0 ? '左' : '右';
+      // 约定与渲染器一致：负=左转，正=右转（addYaw 顺时针为正）
+      const dir = last.degrees <= 0 ? '左' : '右';
       return `收到，${dir}转 ${Math.abs(last.degrees)} 度。`;
     }
     case 'jump':

@@ -465,7 +465,7 @@ async function main() {
         let seg = 0;
         let s = 0;
         drawPath(pts);
-        if (!player.getIsFlying()) player.setInput({ toggleFly: true });
+        // 语言指令不切换人物形态：保持当前模式沿空中航线位移（逐帧 reset 送达），到达后不强制落地
         return {
             update(dt) {
                 let done = false;
@@ -496,7 +496,6 @@ async function main() {
                 done = done || (seg >= pts.length - 1) || (horizontal <= 2 && vertical <= 4);
                 if (done) {
                     zeroInput();
-                    if (player.getIsFlying()) player.setInput({ toggleFly: true }); // 落地后切回
                     clearPath();
                     return true;
                 }
@@ -702,16 +701,14 @@ async function main() {
         switch (dir) {
             case "forward": v.e = Math.sin(yaw); v.n = Math.cos(yaw); break;
             case "backward": v.e = -Math.sin(yaw); v.n = -Math.cos(yaw); break;
-            case "left": v.e = Math.cos(yaw); v.n = -Math.sin(yaw); break; // 左转=正（合同 §3）
-            case "right": v.e = -Math.cos(yaw); v.n = Math.sin(yaw); break;
+            case "left": v.e = -Math.cos(yaw); v.n = Math.sin(yaw); break; // 人物真左侧：forward=(sin,cos) 的左法向
+            case "right": v.e = Math.cos(yaw); v.n = -Math.sin(yaw); break;
             case "up": v.u = 1; break;
             case "down": v.u = -1; break;
         }
         const end = new Cartesian3(start.x + v.e * meters, start.y + v.n * meters, start.z + v.u * meters);
         const total = Math.max(1e-6, Cartesian3.distance(start, end));
-        const wasFlying = player.getIsFlying();
-        const needFly = movement === "fly";
-        if (needFly && !wasFlying) player.setInput({ toggleFly: true });
+        // 语言指令不切换人物形态（walk/fly 模式只由用户手动 F 切换）；空中位移由逐帧 reset 送达
         let s = 0;
         drawPath([start, end]);
         return {
@@ -724,7 +721,6 @@ async function main() {
                 if (Math.hypot(v.e, v.n) > 0.1) faceTowards(v.e, v.n, dt);
                 if (t >= 1) {
                     zeroInput();
-                    if (needFly && !wasFlying && player.getIsFlying()) player.setInput({ toggleFly: true });
                     clearPath();
                     return true;
                 }
@@ -732,7 +728,6 @@ async function main() {
             },
             cancel() {
                 zeroInput();
-                if (needFly && !wasFlying && player.getIsFlying()) player.setInput({ toggleFly: true });
                 clearPath();
             },
         };

@@ -58,9 +58,9 @@ section('合同 v1 中文映射');
   ok(walk10.length === 1 && walk10[0].kind === 'move_relative' && walk10[0].direction === 'forward' && walk10[0].distanceMeters === 10 && walk10[0].movement === 'walk', '向前走 10 米 → move_relative forward 10 walk', JSON.stringify(walk10));
 
   const left90 = parseAvatarCommand('左转 90 度');
-  ok(left90.length === 1 && left90[0].kind === 'turn' && left90[0].degrees === 90, '左转 90 度 → turn +90', JSON.stringify(left90));
+  ok(left90.length === 1 && left90[0].kind === 'turn' && left90[0].degrees === -90, '左转 90 度 → turn -90（渲染器 addYaw 顺时针为正）', JSON.stringify(left90));
   const right45 = parseAvatarCommand('右转 45 度');
-  ok(right45[0].kind === 'turn' && right45[0].degrees === -45, '右转 45 度 → turn -45', JSON.stringify(right45));
+  ok(right45[0].kind === 'turn' && right45[0].degrees === 45, '右转 45 度 → turn +45', JSON.stringify(right45));
 
   const stop = parseAvatarCommand('停下');
   ok(stop.length === 1 && stop[0].kind === 'stop', '停下 → stop', JSON.stringify(stop));
@@ -149,9 +149,9 @@ section('钳制与默认（distance 1..50 默认 10；degrees -180..180）');
   ok(parseAvatarCommand('向前走 999 米')[0].distanceMeters === 50, '999 米 → 钳制 50');
   ok(parseAvatarCommand('向前走 0 米')[0].distanceMeters === 1, '0 米 → 钳制 1');
   ok(parseAvatarCommand('向前走十米')[0].distanceMeters === 10, '中文数字「十米」→ 10');
-  ok(parseAvatarCommand('左转')[0].degrees === 90, '左转（无角度）→ 默认 90');
-  ok(parseAvatarCommand('左转 270 度')[0].degrees === 180, '270 度 → 钳制 180');
-  ok(parseAvatarCommand('右转 270 度')[0].degrees === -180, '右转 270 度 → 钳制 -180');
+  ok(parseAvatarCommand('左转')[0].degrees === -90, '左转（无角度）→ 默认 -90');
+  ok(parseAvatarCommand('左转 270 度')[0].degrees === -180, '270 度 → 钳制 -180');
+  ok(parseAvatarCommand('右转 270 度')[0].degrees === 180, '右转 270 度 → 钳制 180');
   ok(parseAvatarCommand('向前飞 20 米')[0].movement === 'fly', '向前飞 20 米 → movement fly');
 }
 
@@ -302,7 +302,7 @@ section('简式运动：上/下/左/右/前/后 + 起飞/飞行/降落/悬停');
   const long1 = parseAvatarCommand('飞到 B2 屋顶', 'pecc');
   ok(long1[0].kind === 'navigate' && long1[0].targetId === 'CP-B02-ROOF', '「飞到 B2 屋顶」仍走导航路由', JSON.stringify(long1[0]));
   const long2 = parseAvatarCommand('左转 90 度', 'pecc');
-  ok(long2[0].kind === 'turn' && long2[0].degrees === 90, '「左转 90 度」仍走转向路由', JSON.stringify(long2[0]));
+  ok(long2[0].kind === 'turn' && long2[0].degrees === -90, '「左转 90 度」仍走转向路由', JSON.stringify(long2[0]));
 
   // 风电场景共享简式运动
   const windUp = parseAvatarCommand('上', 'wind');

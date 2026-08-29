@@ -178,7 +178,22 @@ try {
     ok(def.json.data?.conversationId === 'CONV-DEMO', '缺省会话 CONV-DEMO', def.json.data?.conversationId);
   }
 
-  // ---------- 8. 风电场景 ----------
+  // ---------- 8. 上下文问答（你是谁 / 当前啥场景 / 任务状态） ----------
+  section('上下文问答门控（确定性，不产生命令）');
+  {
+    const who = await dispatch('你是谁', { conversationId: 'CONV-QA' });
+    ok(who.status === 200 && who.json.data?.reply?.includes('巡界'), '你是谁 → 巡界身份作答', who.json.data?.reply?.slice(0, 40));
+    ok((who.json.data?.commands ?? []).length === 0 && who.json.data?.sceneBrief?.kind === 'identity', '零命令 + identity brief', JSON.stringify(who.json.data?.sceneBrief?.kind));
+    const sceneQ = await post(port, '/api/agent/avatar/dispatch', { text: '当前啥场景', ...WIND });
+    ok(sceneQ.status === 200 && sceneQ.json.data?.reply?.includes('WIND-FARM-01'), '当前啥场景 → 场景元数据', sceneQ.json.data?.reply?.slice(0, 50));
+    ok(sceneQ.json.data?.sceneBrief?.kind === 'scene' && sceneQ.json.data.sceneBrief.sceneId === 'WIND-FARM-01', 'scene brief 结构化', JSON.stringify(sceneQ.json.data?.sceneBrief?.sceneId));
+    const taskQ = await dispatch('当前任务状态', { conversationId: 'CONV-QA' });
+    ok(taskQ.status === 200 && typeof taskQ.json.data?.reply === 'string' && taskQ.json.data.reply.length > 4, '任务状态有作答', taskQ.json.data?.reply?.slice(0, 40));
+    const qaTrace = who.json.data?.trace ?? [];
+    ok(qaTrace[0]?.detail === 'context-qa', 'trace 标记 context-qa', JSON.stringify(qaTrace[0]));
+  }
+
+  // ---------- 9. 风电场景 ----------
   section('风电场景：闭环不可达（澄清）+ 场景命令透传');
   {
     const r = await post(port, '/api/agent/avatar/dispatch', { text: '我同意', ...WIND });

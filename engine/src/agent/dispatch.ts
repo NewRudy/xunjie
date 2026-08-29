@@ -13,8 +13,11 @@ import { resetTasks } from '../inspection';
 import { nowIsoShanghai } from '../util';
 import type { AvatarCommand } from './avatar';
 import { interpretAvatar } from './avatar-llm';
+import { SCENE_ID, SCENE_REVISION } from './context';
+import { activeAdapter } from './model';
 import { createMission, handleSceneEvent, submitApproval, type Clarification } from './runtime';
 import { latestMissionId, loadMission, nextSeq, recentTurns, recordTrace, recordTurn, resetAgentData } from './store';
+import { windFarm, WIND_REPAIR, WIND_SCENE_ID, WIND_SCENE_REVISION } from './windFarm';
 import type { MissionState, PlannerInfo } from './types';
 
 const CLOSED_LOOP_KINDS = ['start_inspection', 'decide_pending', 'capture_evidence'] as const;
@@ -55,6 +58,8 @@ export type DispatchResult =
       status: 'available' | 'partial' | 'rejected';
       conversationId: string;
       trace: TraceStep[];
+      /** 上下文问答时携带结构化场景信息（identity/scene/mission） */
+      sceneBrief?: Record<string, unknown>;
       normalizedText: string;
       reply: string;
       commands: AvatarCommand[];
@@ -73,10 +78,90 @@ function resetDemo(): void {
 
 type MissionResolve = { ok: true; m: MissionState } | { ok: false; code: string; message: string };
 
+// —— 上下文问答门控（确定性，先于 LLM）：「你是谁」「当前啥场景」「当前任务」等场景元问题 ——
+const IDENTITY_QA_RE = /你是谁|你叫什么|自我介绍|介绍(?:一下|下)?你自己/;
+const SCENE_QA_RE = /什么场景|啥场景|当前场景|这是(?:哪里|什么地方)|场景信息|现在是哪里|哪个场站|什么站|当前模式|什么模式/;
+const MISSION_QA_RE = /当前任务|任务状态|什么任务|啥任务|任务进展/;
+
+interface ContextAnswer {
+  reply: string;
+  brief: Record<string, unknown>;
+}
+
+function sceneMeta(scene: 'pecc' | 'wind') {
+  return scene === 'wind'
+    ? {
+        sceneId: WIND_SCENE_ID,
+        sceneRevision: WIND_SCENE_REVISION,
+        name: `${windFarm.name}（风电场站·演示仿真）`,
+        registered: `10 台风机组 HS-WTG-01..10 + 塔下检查点 CP-WT-01..10 + 运维点 OPS-WIND-01；维修登记：${WIND_REPAIR.targetId}（${WIND_REPAIR.componentLabel}）`,
+      }
+    : {
+        sceneId: SCENE_ID,
+        sceneRevision: SCENE_REVISION,
+        name: '光伏园区（演示仿真）',
+        registered: '运维点 OPS-01、B2 楼前/屋面与逆变器检查点、组串 STR-B2-07、逆变器 INV-B-02；登记异常 ANOM-DEMO-01',
+      };
+}
+
+function answerContextQuestion(text: string, scene: 'pecc' | 'wind'): ContextAnswer | null {
+  const meta = sceneMeta(scene);
+  const m = (() => {
+    const id = latestMissionId();
+    return id ? loadMission(id) : null;
+  })();
+  const missionLine = m ? `当前任务 ${m.missionId}，阶段 ${m.phase}${m.receipt ? '（已闭环）' : ''}` : '当前没有进行中的任务';
+  if (IDENTITY_QA_RE.test(text)) {
+    return {
+      reply: `我是「巡界」数字运维员，在${meta.name}的三维现场执行空间作业（SIMULATED 仿真，不控制任何真实设备）。${missionLine}。你可以用中文指挥我移动、巡检与维修推演；闭环动作需经你授权。`,
+      brief: { kind: 'identity', ...meta, missionId: m?.missionId ?? null, missionPhase: m?.phase ?? null },
+    };
+  }
+  if (SCENE_QA_RE.test(text)) {
+    const adapter = activeAdapter();
+    return {
+      reply: `当前场景：${meta.name}（${meta.sceneId}@${meta.sceneRevision}）。已登记对象：${meta.registered}。${missionLine}。指令解释方式：${adapter ? '大模型在线（白名单校验）' : '确定性解析'}。`,
+      brief: { kind: 'scene', ...meta, missionId: m?.missionId ?? null, missionPhase: m?.phase ?? null, plannerMode: adapter ? 'llm' : 'deterministic-fallback' },
+    };
+  }
+  if (MISSION_QA_RE.test(text)) {
+    return {
+      reply: m
+        ? `${missionLine}；巡检任务 ${m.inspectionTaskId ?? '未创建'}；待审批：${m.pendingApproval ? (m.pendingApproval.purpose === 'close' ? '闭环确认' : '执行计划') : '无'}。`
+        : '当前没有进行中的任务。说「检查 B2 屋顶异常」即可创建巡检任务（光伏场景）。',
+      brief: { kind: 'mission', sceneId: meta.sceneId, missionId: m?.missionId ?? null, phase: m?.phase ?? null, inspectionTaskId: m?.inspectionTaskId ?? null },
+    };
+  }
+  return null;
+}
+
 export async function dispatchAvatarText(input: DispatchInput): Promise<DispatchResult> {
   const conversationId = input.conversationId?.trim() || DEFAULT_CONVERSATION_ID;
   const trace: TraceStep[] = [];
   const t0 = Date.now();
+
+  // 上下文问答门控：元问题确定性作答，不消耗 LLM、不产生命令
+  const qa = answerContextQuestion(input.text, input.scene);
+  if (qa) {
+    const adapter = activeAdapter();
+    trace.push({ label: '解释', status: 'ok', durationMs: Date.now() - t0, detail: 'context-qa' });
+    trace.push({ label: '总计', status: 'ok', durationMs: Date.now() - t0 });
+    recordTrace(`TRC-${nextSeq('trace')}`, conversationId, trace);
+    recordTurn(conversationId, { text: input.text, scene: input.scene, commands: [], outcomeSummary: 'context-qa', ts: nowIsoShanghai() });
+    return {
+      kind: 'ok',
+      status: 'available',
+      conversationId,
+      trace,
+      sceneBrief: qa.brief,
+      normalizedText: input.text,
+      reply: qa.reply,
+      commands: [],
+      outcomes: [],
+      mission: null,
+      planner: adapter ? { mode: 'llm', modelAvailable: true } : { mode: 'deterministic-fallback', modelAvailable: false, reason: 'NO_CREDENTIALS' },
+    };
+  }
 
   const tInterpret = Date.now();
   const history = recentTurns(conversationId, 2).map((t) => ({ text: t.text, commands: t.commands }));
