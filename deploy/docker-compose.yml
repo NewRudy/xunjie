@@ -8,6 +8,8 @@ services:
     volumes:
       - ./engine-data:/data:ro
       - ./web/dist/wind/farm.json:/player-demo/example/public/wind/farm.json:ro
+      - ./web/dist/hydro/dam.json:/player-demo/example/public/hydro/dam.json:ro
+      - ./web/dist/solar/solar.json:/player-demo/example/public/solar/solar.json:ro
       - engine-var:/app/var
 
   web:
