@@ -4,7 +4,8 @@
 
 ## 0. 当前优先级（2026-08-29 用户纠偏）
 
-- 当前主入口是文字对话框；语音不作为本轮完成条件。
+- 主前端为 player-demo 沉浸式场景页（AI 面板为指挥入口）；旧 web/ Vue 面板保留为光伏闭环可视化参考。
+- 语音输入（豆包 ASR）已实现为可选适配层（见 §7），未配置凭据时回落文字入口，不改变动作执行链。
 - 前端人物主执行器必须实际初始化并调用 npm 包 `cesium-player-controller`，不能只保留一个未来适配器接口。
 - 配置 `AGENT_LLM_API_KEY` 时，`POST /api/agent/avatar/interpret` 必须真实调用 OpenAI-compatible 模型（Kimi/智谱均可），再把模型 JSON 经过确定性白名单校验后返回。
 - 未配置凭据或模型失败时可回退现有确定性中文解析，但响应和界面必须明确显示 `deterministic-fallback`，不得伪称“大模型正在控制”。
@@ -54,7 +55,7 @@
 }
 ```
 
-响应 `truth` 必须是 `SIMULATED`，并在 `warnings` 中明确“仅数字现场仿真”。无法唯一理解时返回 `400 CLARIFICATION_NEEDED`，不猜目标。
+响应 `truth` 必须是 `SIMULATED`（真值标签只在该字段承载；2026-08-29 起响应不再附带「仅数字现场仿真」免责 warnings 文案）。无法唯一理解时返回 `400 CLARIFICATION_NEEDED`，不猜目标。
 
 成功响应顶层 `planner` 必须如实标明本轮解释来源：模型校验通过时为 `{ "mode": "llm", "modelAvailable": true }`；模型未配置、调用失败或输出校验失败时为 `deterministic-fallback` 并给出不含密钥/请求正文的 `reason`。
 
@@ -77,7 +78,7 @@ type AvatarCommand =
 约束：
 
 - `distanceMeters` 默认 10，服务端钳制到 `1..2000`（说了多少用多少；适配风电大尺度场景）。
-- `turn.degrees` 只允许 `-180..180`。
+- `turn.degrees` 只允许 `-180..180`；符号约定与人物渲染器一致（`addYaw` 顺时针为正）：**左转 = 负角度、右转 = 正角度**（如「左转 90 度」→ `-90`）。
 - `up/down` 必须使用 `movement: 'fly'`。
 - 新指令可以中断当前纯数字移动；`stop` 立即停止。
 - `repair_simulation` 必须确认人物已在目标检查点附近；否则前端先自动导航到 `checkpointId`。
@@ -122,13 +123,11 @@ type AvatarCommand =
 - 本轮可不构建完整 3D Tiles 静态碰撞体，但必须保留基础胶囊体/重力/人物动画和第一、第三人称能力；不得把“未接碰撞源”表述成工程级碰撞或寻路。
 - 维修拆解与业务状态仍由现有确定性仿真层负责，不让人物控制器直接写任务状态。
 
-## 7. 语音后接方式（本轮后置）
+## 7. 语音链路（2026-08-29 更新：输入侧已实现）
 
-浏览器按住说话或服务端 ASR 得到最终转写后，只调用 `POST /api/agent/avatar/interpret`。因此本版文字入口就是语音链路除 ASR 外的完整可测替身。
+**输入侧（已实现）**：豆包 Seed ASR（协议移植自 pipe-report-agent）——前端按住说话采集 PCM 16k，上传 `POST /api/agent/voice/asr` 得到转写文本，随后走 dispatch 同一文字链路；凭据走 `DOUBAO_ASR_*` 环境变量，未配置返回 503 并提示文字指令。ASR 结果不得直接调用 Cesium 或绕过审批。
 
-浏览器首版采用 Web Speech API（`zh-CN`）作为可选适配层：必须由用户点击后启动，显示听写状态和最终转写；浏览器不支持或权限失败时明确提示并保留文字输入。ASR 结果不得直接调用 Cesium 或绕过审批，仍先进入本合同的解释接口。
-
-输出侧语音播报（2026-08-29 风电页上线）同属浏览器本地适配层：Web Speech API `speechSynthesis`（`zh-CN`）朗读后端 `reply` 与澄清消息，不联网、不调用云端 TTS；首次发声必须在用户手势链路内，前端提供明显开关并如实标注「浏览器本地 TTS」。播报内容仅以本合同接口的响应为源，不得合成接口之外的承诺性话术；语音缺失/失败不影响文字链路的完整性。
+**输出侧**：浏览器本地 `speechSynthesis`（`zh-CN`）播报，规则为——问答类响应（`data.sceneBrief` 存在：身份/场景/任务/对象/事实托底）播报 `reply`；操作数字人的执行确认静默（画面已反馈）；澄清引导播报。不联网、不调用云端 TTS；提供明显开关并如实标注「浏览器本地 TTS」。播报内容仅以合同接口的响应为源，不得合成接口之外的承诺性话术。
 
 ## 8. 任务闭环语言验收
 
@@ -179,7 +178,7 @@ type AvatarCommand =
 - 场景命令（navigate/focus_asset/repair_simulation/运动类）**原样透传**由前端执行（渲染层职责）；审批签发的 `pendingCommands` 仍随任务快照下发。
 - **风电场景闭环命令显式拒绝**（`UNSUPPORTED_IN_SCENE`），场景命令不受影响。
 - 响应顶层 `status`：`available` / `partial`（部分闭环被拒）/ `rejected`（全部闭环被拒）；澄清语义与 §2 相同（400 CLARIFICATION_NEEDED）。
-- 本接口只加不减：`/avatar/interpret` 合同不变。验收套件 `pnpm test:dispatch`（35 项，真实 engine 实例）。
+- 本接口只加不减：`/avatar/interpret` 合同不变。验收套件 `pnpm test:dispatch`（56 项，真实 engine 实例；含上下文问答、会话聚合与 trace）。
 
 ### 10.1 会话与 trace（P2，2026-08-29）
 

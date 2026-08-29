@@ -269,3 +269,24 @@
 - 并发分工注意：另一 agent 同期重构了 engine 的 LLM 网关（capabilities.ts 能力目录、avatar-llm.ts 走 model.ts structured 网关）并新建 PPT_CONTENT.md/TEAM_PPT_BRIEF.md/XUNJIE_PROJECT_CONTENT.md——在其上叠加，不回退；改 engine 文件前先重新 Read。
 - 环境经验：本机代理会掐断 GitHub 大文件（~1MB），`curl --noproxy '*'` 直连 codeload 可达 730KB/s；npm 用 npmmirror 快。player-demo dev server 跑在 5210（5173 被旧 web 占用），页面 `http://localhost:5210/cesium-player-controller/`，风电页 `/wind/`。
 - 待办：player-demo 风电场景页（子代理进行中）→ 浏览器整链验收（无头软渲染跑不动 146MB 山体，需真实浏览器）→ farm.json 里 opsPoint 的 up=150 与风机 focus 高亮点是估算值，物理落地后需目检校准。
+
+### 2026-08-29 · 首页重做 + 风场流线/AI 悬浮球/语音播报落地
+
+- **首页（player-demo/example/index.html）重写**：深色工程风（藏青+青 #43c9e8+网格底纹）；GitHub 链接修正为 `https://github.com/NewRudy/xunjie`；三张工程场景卡按用户指定顺序 01 水电站（接入中）→ 02 风电场站·老鸦岭（可用·SIMULATED）→ 03 光伏电站（接入中）；下半页填「作业主链」七步条（自然语言任务→上下文研判→用户授权→路线决策→确定性执行→部件级维修推演→证据与回执）与「真实性边界」三条声明；页脚署名齐全。
+- **风场流线**：黔风智维 `apps/web/src/scene/vendor/cesiumWindLayer/`（MIT © Hongfa Qiu）整目录拷入 `player-demo/example/wind/vendor/`，配 `windFieldConfig/Model/Layer.ts`（局地 ENU 解析风场：山脊通道+尾流，68°/8.6m/s/84×84 粒子，参数照抄黔风 sceneConfig）；viewer 无 ion 下零适配通过 cesium 1.142 tsc。HUD 有「风场流线」开关（默认开），credits 第 4 行署名，UPSTREAM.md 已记来源。
+- **AI 悬浮球**：按黔风 v2 AssistantPanel.vue 外观用原生 TS 重写（58px 渐变光球+双旋转环+轨道粒子+发光内核，可拖拽、位置 localStorage、面板跟随球侧），成为唯一输入入口；`#cmd-input`/`#cmd-form` id 保留在面板内（e2e 脚本零改动）。发送走 Claude 的 `/api/agent/avatar/dispatch`，带 `conversationId:'CONV-WIND-DEMO'`；气泡内含 reply + planner 徽标 + 命令 chips + dispatch outcomes + trace `<details>` 折叠；400 澄清同通道展示。
+- **语音播报**：浏览器本地 `speechSynthesis`（zh-CN，不联网）朗读 reply 与澄清消息；speak 前写 `window.__lastSpoken` 探针；面板头部麦克风开关（默认开，localStorage 记忆）；不支持时禁用并明示。合同 §7 已补输出侧口径（本地适配层、用户手势启动、不合成接口外话术）。
+- **验证**：`tsc -p example/tsconfig.json` 通过（vendor 纳入检查）；CDP e2e 全过（流线渲染/球开合/「维修 7 号风机」七步留痕+记录卡/`__lastSpoken` 含「维修仿真」/0 EXCEPTION）；截图 /tmp/wind_ai_1..4_*.png。全部改动未提交（工作区），按约定 git 由用户工作流处理。
+- 遗留小项：AI 面板展开时与维修记录卡右下轻微重叠（均可拖拽/关闭消解）；无头 swiftshader 粒子稀疏属环境限制；黔风 SCADA 面板与 BIM 拆解（equipment.glb/skeleton.glb，无许可）本轮明确不搬。
+
+### 2026-08-29 · 服务端编排 P1/P2 + 场景包契约 + 语音输入（Claude 后端打磨）
+
+- **P1 编排收权**：新增 `POST /api/agent/avatar/dispatch`（contracts/avatar-command.md §10）——闭环命令服务端执行：start_inspection=复位+建任务原子化；decide_pending=服务端绑定当前待审批四重绑定（前端不再回传审批三元组）；capture_evidence=状态机裁决（过早暂存/缺 ROOF 阻塞）。场景命令透传；风电闭环显式拒绝；`/avatar/interpret` 合同不变。风电页 AI 面板已切 dispatch。
+- **P2 会话与可观测**：agent_turns/agent_trace 表；conversationId 聚合轮次摘要（注入 LLM prompt、支撑「它」指代）；dispatch 返回逐节点 trace（解释/执行/总计，入库+随响应）。
+- **运动意图打磨**（用户实测反馈）：简式方向词「上/下/左/右/前/后(可带距离)」与飞行动词「起飞/飞行/降落/悬停」入词表（剥离客套词须整词剥离,裸剥「一/下」会吞「下」）；**转向符号翻转为左转=负/右转=正**（渲染器 addYaw 顺时针为正,原约定左右颠倒）；前端平移左右向量修正；语言命令不再切换人物形态（删自动 toggleFly）；distance 上限 50→2000、说了多少用多少,新增「飞 N 米」=前向飞行。
+- **上下文问答**（用户要求"人话、不带 ID"）：dispatch 前置确定性门控——身份/场景/任务/对象(状态·参数·位置),回答口语化且回归断言不含 ID；对象问答由 **ScenePackage 注册表**(`src/scene/registry.ts` + contracts/scene-package.md)属性驱动,光伏(黔光智维)/风电(老鸦岭)双场景适配,「它」指代最近命令对象；门控未接住的问句走**事实托底 LLM**(场景包事实喂模型,校验无 ID+数字溯源+≤200字,失败降级软化澄清)。
+- **语音**：豆包 Seed ASR 协议移植(pipe-report-agent),`POST /api/agent/voice/asr`(PCM16k→文本,DOUBAO_ASR_* 环境变量,未配置 503)；风电页按住说话→识别→同一 dispatch 链路；**播报规则**:问答类(sceneBrief)播报、操作数字人静默、澄清播报；输出用浏览器本地 TTS(管网无 TTS 链)。
+- **口径变化**：响应不再附「仅数字现场仿真」免责 warnings(truth 字段承载);web/ 定位为弃用的旧演示面板(用户拍板"要 Kimi 的前端"),主前端=player-demo 多页站点(5210)。
+- **测试**：avatar 110/110、avatar-llm 98/98、gateway 32/32、dispatch 56/56(真实引擎)、evals 40/40、voice 14/14、agent 72/72,tsc 前后端全绿。
+- **文档同步**：README 重写(双场景/dispatch/语音/新验证矩阵)、DEMO_SCRIPT_90S v2(风电页口径)、avatar-command §0/§2/§7 更新、scene-package.md 新建；SUBMISSION_ONE_PAGER/TEAM 文档数字待同步(本轮部分完成)。
+- 待办：光伏沉浸式页(闭环故事的家)、闭环可视化组件(提案/审批/证据/回执)进 AI 面板、真实凭据端到端冒烟、部署链接、对象问答接损失折钱(lossKwhTotal 现成)。
