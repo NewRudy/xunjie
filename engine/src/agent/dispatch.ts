@@ -10,14 +10,14 @@
 // 本接口只加不减：/avatar/interpret 合同不变（风电页继续可用）。
 import { resetAnomaly } from '../anomalyState';
 import { resetTasks } from '../inspection';
+import { findObjectByMention, findObjectByRef, getPackage, pickSpecs, RISK_LABEL_CN } from '../scene/registry';
+import type { SceneObject, ScenePackage } from '../scene/registry';
 import { nowIsoShanghai } from '../util';
 import type { AvatarCommand } from './avatar';
 import { interpretAvatar } from './avatar-llm';
-import { SCENE_ID, SCENE_REVISION } from './context';
 import { activeAdapter } from './model';
 import { createMission, handleSceneEvent, submitApproval, type Clarification } from './runtime';
 import { latestMissionId, loadMission, nextSeq, recentTurns, recordTrace, recordTurn, resetAgentData } from './store';
-import { windFarm, WIND_REPAIR, WIND_SCENE_ID, WIND_SCENE_REVISION } from './windFarm';
 import type { MissionState, PlannerInfo } from './types';
 
 const CLOSED_LOOP_KINDS = ['start_inspection', 'decide_pending', 'capture_evidence'] as const;
@@ -79,6 +79,7 @@ function resetDemo(): void {
 type MissionResolve = { ok: true; m: MissionState } | { ok: false; code: string; message: string };
 
 // —— 上下文问答门控（确定性，先于 LLM）：身份 / 场景 / 任务 / 对象（状态·参数·位置） ——
+// 对象问答由场景包注册表属性驱动（contracts/scene-package.md）：换场景 = 换数据，不改本文件。
 // 原则：回答只讲人话——关键事实组织成自然语句；ID/来源/编码留在 sceneBrief 结构化字段给前端使用。
 const IDENTITY_QA_RE = /你是谁|你叫什么|自我介绍|介绍(?:一下|下)?你自己/;
 const SCENE_QA_RE = /什么场景|啥场景|当前场景|这是(?:哪里|什么地方)|场景信息|现在是哪里|哪个场站|什么站/;
@@ -86,7 +87,6 @@ const MISSION_QA_RE = /当前任务|任务状态|什么任务|啥任务|任务�
 
 const OBJ_CMD_VERB_RE = /飞到|跑到|走到|前往|赶去|回去|回到|运维点|维修|修复|消缺|检修|查看|看看|聚焦|对准|停下|停止|站住|暂停|别动|左转|右转|转身|掉头|跳|采集|提交|取证|拍照|检查|巡检|排查|同意|批准|赞同|执行|拒绝|取消|证据|起飞|降落|落地|着陆|悬停|上升|下降|升高|降低|爬升/;
 const OBJ_REFERENT_RE = /它|这个设备|该设备|当前对象|当前设备|这台|该机组/;
-const OBJ_TURBINE_RE = /([0-9]{1,2}|[一二两三四五六七八九十])\s*号\s*(?:风机|机组)?|HS-WTG-(\d{2})/i;
 const OBJ_STATUS_RE = /状态|风险|情况|严重|怎么样|怎样|正常|告警|健康|预警|毛病|问题/;
 const OBJ_SPEC_RE = /参数|尺寸|长宽高|多高|多大|规格|功率|高度|直径|型号|机型|多少米|叶片|齿轮箱|发电机|基础|多少千瓦/;
 const OBJ_POS_RE = /位置|坐标|在哪|朝向|多远|海拔|标高|方位/;
@@ -94,48 +94,6 @@ const OBJ_POS_RE = /位置|坐标|在哪|朝向|多远|海拔|标高|方位/;
 interface ContextAnswer {
   reply: string;
   brief: Record<string, unknown>;
-}
-
-interface WindTurbineMeta {
-  id: string;
-  label: string;
-  no: number;
-  checkpointId: string;
-  offset?: { east: number; north: number; up: number };
-  headingDeg?: number;
-  riskLevel?: 'normal' | 'warning' | 'critical';
-  stateNote?: string;
-}
-
-const RISK_LABEL_CN: Record<string, string> = { normal: '正常', warning: '预警', critical: '严重' };
-
-const CN_NUM: Record<string, number> = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
-
-function turbineByNo(no: number): WindTurbineMeta | undefined {
-  return windFarm.turbines.find((t) => t.no === no) as WindTurbineMeta | undefined;
-}
-
-function parseTurbineNo(raw: string): number {
-  if (/^[0-9]+$/.test(raw)) return Number.parseInt(raw, 10);
-  return CN_NUM[raw] ?? Number.NaN;
-}
-
-/** 指代解析：显式「N 号风机」优先；否则回看最近几轮命令里最后指向的机组（「它」） */
-function resolveTurbine(text: string, conversationId: string): WindTurbineMeta | null {
-  const m = text.match(OBJ_TURBINE_RE);
-  if (m) {
-    const no = m[1] !== undefined ? parseTurbineNo(m[1]) : Number.parseInt(m[2] ?? '', 10);
-    return turbineByNo(no) ?? null;
-  }
-  if (OBJ_REFERENT_RE.test(text)) {
-    for (const turn of recentTurns(conversationId, 3)) {
-      for (const c of [...turn.commands].reverse()) {
-        const tm = String(c.targetId ?? '').match(/^(?:HS-WTG|CP-WT)-(\d{2})$/);
-        if (tm) return turbineByNo(Number(tm[1])) ?? null;
-      }
-    }
-  }
-  return null;
 }
 
 function humanPhase(phase: string): string {
@@ -163,70 +121,64 @@ function missionHumanLine(): string {
   return m ? `当前有一个巡检任务，${humanPhase(m.phase)}。` : '当前没有进行中的任务。';
 }
 
-function sceneMeta(scene: 'pecc' | 'wind') {
-  return scene === 'wind'
-    ? {
-        sceneId: WIND_SCENE_ID,
-        sceneRevision: WIND_SCENE_REVISION,
-        name: `${windFarm.name}（风电场站·演示仿真）`,
-        registered: `10 台风机组 HS-WTG-01..10 + 塔下检查点 CP-WT-01..10 + 运维点 OPS-WIND-01；维修登记：${WIND_REPAIR.targetId}（${WIND_REPAIR.componentLabel}）`,
-      }
-    : {
-        sceneId: SCENE_ID,
-        sceneRevision: SCENE_REVISION,
-        name: '光伏园区（演示仿真）',
-        registered: '运维点 OPS-01、B2 楼前/屋面与逆变器检查点、组串 STR-B2-07、逆变器 INV-B-02；登记异常 ANOM-DEMO-01',
-      };
+function sceneMeta(pkg: ScenePackage) {
+  return { sceneId: pkg.sceneId, sceneRevision: pkg.sceneRevision, name: pkg.name, sourceRef: pkg.sourceRef };
 }
 
-function turbineAnswer(t: WindTurbineMeta, text: string): ContextAnswer {
-  const specs = windFarm.specs ?? {};
+function objectAnswer(pkg: ScenePackage, obj: SceneObject, text: string): ContextAnswer {
+  const specs = { ...pkg.specs, ...(obj.specs ?? {}) };
   if (OBJ_SPEC_RE.test(text)) {
-    let keys: string[];
-    if (/长宽高|机舱/.test(text)) keys = ['机型', '机舱尺寸'];
-    else if (/高/.test(text)) keys = ['机型', '轮毂高度', '塔筒高度'];
-    else if (/直径|叶轮|叶片/.test(text)) keys = ['机型', '叶轮直径', '叶片长度'];
-    else if (/功率|千瓦|多大/.test(text)) keys = ['机型', '额定功率'];
-    else if (/齿轮箱|发电机|基础/.test(text)) keys = [text.match(/齿轮箱|发电机|基础/)![0]];
-    else keys = ['机型', '额定功率', '轮毂高度', '叶轮直径', '塔筒高度', '机舱尺寸'];
-    const parts = keys.filter((k) => specs[k]).map((k) => `${k} ${specs[k]}`);
-    return { reply: `${t.label}是${specs['机型'] ?? '风电机组'}：${parts.join('；')}。`, brief: { kind: 'object', object: t.id, aspect: 'specs' } };
+    const parts = pickSpecs(specs, text).map(([k, v]) => `${k} ${v}`);
+    const head = specs['机型'] ? `${obj.label}是${specs['机型']}：` : `${obj.label}的关键参数：`;
+    return { reply: `${head}${parts.join('；')}。`, brief: { kind: 'object', object: obj.id, aspect: 'specs' } };
   }
   if (OBJ_POS_RE.test(text)) {
-    const o = t.offset;
-    const where = o ? `在场地${(o.north ?? 0) >= 0 ? '北' : '南'}侧偏${(o.east ?? 0) >= 0 ? '东' : '西'}方向，场地高程约 ${o.up} 米` : '沿山脊布置';
-    return { reply: `${t.label}${where}，机舱朝向约 ${t.headingDeg ?? '—'} 度。`, brief: { kind: 'object', object: t.id, aspect: 'position' } };
+    const o = obj.position;
+    const where = o
+      ? `在场地${(o.north ?? 0) >= 0 ? '北' : '南'}侧偏${(o.east ?? 0) >= 0 ? '东' : '西'}方向，场地高程约 ${Math.round(o.up)} 米`
+      : '沿场地布置';
+    return {
+      reply: `${obj.label}${where}${obj.headingDeg != null ? `，机舱朝向约 ${obj.headingDeg} 度` : ''}。`,
+      brief: { kind: 'object', object: obj.id, aspect: 'position' },
+    };
   }
-  const level = RISK_LABEL_CN[t.riskLevel ?? 'normal'];
-  const note = t.stateNote?.trim();
-  const statusLine = level === '正常' ? `${t.label}状态正常` : `${t.label}状态${level}——${note ?? '需要现场关注'}`;
+  const level = RISK_LABEL_CN[obj.riskLevel ?? 'normal'];
+  const note = obj.stateNote?.trim();
+  const statusLine = level === '正常' ? `${obj.label}状态正常` : `${obj.label}状态${level}——${note ?? '需要现场关注'}`;
+  const topSpecs = pickSpecs(specs, text, 2)
+    .map(([k, v]) => `${k} ${v}`)
+    .join('，');
   return {
-    reply: `${statusLine}。机组是${specs['机型'] ?? '风电机组'}，轮毂高度${specs['轮毂高度'] ?? '—'}，叶轮直径${specs['叶轮直径'] ?? '—'}。想看详细参数可以问我「它的参数」。`,
-    brief: { kind: 'object', object: t.id, aspect: OBJ_STATUS_RE.test(text) ? 'status' : 'overview', riskLevel: t.riskLevel ?? 'normal', stateNote: note ?? null },
+    reply: `${statusLine}。${topSpecs ? topSpecs + '。' : ''}想看详细参数可以问我「它的参数」。`,
+    brief: { kind: 'object', object: obj.id, aspect: OBJ_STATUS_RE.test(text) ? 'status' : 'overview', riskLevel: obj.riskLevel ?? 'normal', stateNote: note ?? null },
   };
 }
 
-function answerContextQuestion(text: string, scene: 'pecc' | 'wind', conversationId: string): ContextAnswer | null {
-  const meta = sceneMeta(scene);
+function answerContextQuestion(text: string, scene: 'pecc' | 'wind', sceneId: string, conversationId: string): ContextAnswer | null {
+  const pkg = getPackage(sceneId);
+  if (!pkg) return null;
+  const meta = sceneMeta(pkg);
   if (IDENTITY_QA_RE.test(text)) {
     return {
       reply: `我是「巡界」数字运维员，在${meta.name}的三维现场干活：移动巡检、设备查看、维修推演都可以交给我，重要的动作会先请你授权。${missionHumanLine()}`,
-      brief: { kind: 'identity', missionPhase: (latestMissionId() ? loadMission(latestMissionId()!)?.phase : null) ?? null },
+      brief: { kind: 'identity', ...meta },
     };
   }
   if (SCENE_QA_RE.test(text)) {
-    if (scene === 'wind') {
-      const turbines = windFarm.turbines as WindTurbineMeta[];
-      const crit = turbines.filter((t) => t.riskLevel === 'critical');
-      const warn = turbines.filter((t) => t.riskLevel === 'warning');
-      const lines = [`当前是${windFarm.name}，山脊上共有 ${turbines.length} 台${windFarm.specs?.['机型'] ?? '风电机组'}`];
-      if (crit.length) lines.push(`其中${crit.map((t) => t.label).join('、')}问题比较严重——${crit.map((t) => t.stateNote ?? '需要处理').join('；')}`);
-      if (warn.length) lines.push(`${warn.map((t) => t.label).join('、')}有预警`);
+    if (pkg.kind === 'wind') {
+      const devices = pkg.objects.filter((o) => o.kind === 'device');
+      const crit = devices.filter((o) => o.riskLevel === 'critical');
+      const warn = devices.filter((o) => o.riskLevel === 'warning');
+      const lines = [`当前是${pkg.name}，山脊上共有 ${devices.length} 台${pkg.specs['机型'] ?? '风电机组'}`];
+      if (crit.length) lines.push(`其中${crit.map((o) => o.label).join('、')}问题比较严重——${crit.map((o) => o.stateNote ?? '需要处理').join('；')}`);
+      if (warn.length) lines.push(`${warn.map((o) => o.label).join('、')}有预警`);
       lines.push(`其余机组运行正常，场内还有一个运维点。${missionHumanLine()}`);
       return { reply: lines.join('；'), brief: { kind: 'scene', ...meta } };
     }
+    const warn = pkg.objects.filter((o) => o.kind === 'device' && o.riskLevel === 'warning');
+    const warnLine = warn.length ? `${warn.map((o) => o.label).join('、')}登记了发电异常——${warn.map((o) => o.stateNote ?? '待现场核查').join('；')}。` : '';
     return {
-      reply: `当前是光伏园区（演示仿真）：B2 屋顶的光伏阵列里登记了 7 号组串的发电异常，逆变器和楼前、屋面检查点都已入图。${missionHumanLine()}`,
+      reply: `当前是${pkg.name}。${warnLine}逆变器和楼前、屋面检查点都已入图。${missionHumanLine()}`,
       brief: { kind: 'scene', ...meta },
     };
   }
@@ -240,10 +192,22 @@ function answerContextQuestion(text: string, scene: 'pecc' | 'wind', conversatio
       brief: { kind: 'mission', sceneId: meta.sceneId, missionId: m?.missionId ?? null, phase: m?.phase ?? null, inspectionTaskId: m?.inspectionTaskId ?? null },
     };
   }
-  // 对象问答（风电：机组状态/参数/位置；「它」指代最近一轮命令指向的机组）
-  if (scene === 'wind' && !OBJ_CMD_VERB_RE.test(text)) {
-    const t = resolveTurbine(text, conversationId);
-    if (t) return turbineAnswer(t, text);
+  // 对象问答（注册表属性驱动，两场景通用；「它」指代最近一轮命令指向的对象）
+  if (!OBJ_CMD_VERB_RE.test(text)) {
+    let obj = findObjectByMention(pkg, text);
+    if (!obj && OBJ_REFERENT_RE.test(text)) {
+      for (const turn of recentTurns(conversationId, 3)) {
+        for (const c of [...turn.commands].reverse()) {
+          const hit = findObjectByRef(pkg, String(c.targetId ?? ''));
+          if (hit) {
+            obj = hit;
+            break;
+          }
+        }
+        if (obj) break;
+      }
+    }
+    if (obj) return objectAnswer(pkg, obj, text);
   }
   return null;
 }
@@ -254,7 +218,7 @@ export async function dispatchAvatarText(input: DispatchInput): Promise<Dispatch
   const t0 = Date.now();
 
   // 上下文问答门控：元问题确定性作答，不消耗 LLM、不产生命令
-  const qa = answerContextQuestion(input.text, input.scene, conversationId);
+  const qa = answerContextQuestion(input.text, input.scene, input.sceneId, conversationId);
   if (qa) {
     const adapter = activeAdapter();
     trace.push({ label: '解释', status: 'ok', durationMs: Date.now() - t0, detail: 'context-qa' });

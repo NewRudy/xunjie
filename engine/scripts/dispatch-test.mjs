@@ -203,6 +203,14 @@ try {
     ok(it5.status === 200 && it5.json.data?.reply?.includes('5 号风机') && it5.json.data.reply.includes('正常'), '「它」指代最近导航对象（5 号）', it5.json.data?.reply?.slice(0, 40));
     const cur = await post(port, '/api/agent/avatar/dispatch', { text: '当前对象的机舱尺寸', ...WIND, conversationId: 'CONV-OBJ' });
     ok(cur.status === 200 && cur.json.data?.reply?.includes('机舱'), '「当前对象」参数问答', cur.json.data?.reply?.slice(0, 40));
+
+    const pst = await post(port, '/api/agent/avatar/dispatch', { text: '7 号组串什么状态', ...PECC, conversationId: 'CONV-QA2' });
+    ok(pst.status === 200 && pst.json.data?.reply?.includes('预警') && pst.json.data.reply.includes('组串'), '光伏 7 号组串状态（注册表驱动）', pst.json.data?.reply?.slice(0, 50));
+    ok(!/STR-|ANOM-|CP-INV/.test(pst.json.data.reply), '光伏对象回答不带 ID（人话）', pst.json.data?.reply);
+    const psp = await post(port, '/api/agent/avatar/dispatch', { text: '7 号组串的参数', ...PECC, conversationId: 'CONV-QA2' });
+    ok(psp.status === 200 && psp.json.data?.reply?.includes('组件数量'), '光伏组串参数问答', psp.json.data?.reply?.slice(0, 40));
+    const pscene = await post(port, '/api/agent/avatar/dispatch', { text: '当前啥场景', ...PECC });
+    ok(pscene.status === 200 && pscene.json.data?.reply?.includes('黔光智维'), '光伏场景问答讲人话', pscene.json.data?.reply?.slice(0, 40));
   }
 
   // ---------- 9. 风电场景 ----------

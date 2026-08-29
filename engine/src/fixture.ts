@@ -8,6 +8,8 @@ export interface Fixture {
   name: string;
   fictional: boolean;
   prototypeNote: string;
+  /** 场景级默认规格（scene-package 契约；对象问答用） */
+  specs?: Record<string, string>;
   anchor: { lat: number; lon: number; altM: number };
   gridConnection: Record<string, unknown>;
   buildings: any[];
