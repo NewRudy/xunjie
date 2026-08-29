@@ -31,6 +31,12 @@ export function loadMission(id: string): MissionState | null {
   return row ? (JSON.parse(row.data) as MissionState) : null;
 }
 
+/** 最近创建的任务 id（dispatch 未显式给 missionId 时定位当前任务） */
+export function latestMissionId(): string | null {
+  const row = db.prepare('SELECT id FROM agent_missions ORDER BY rowid DESC LIMIT 1').get() as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
 // —— 事件幂等（scene-events.md §3：重复 eventId/idempotencyKey 不产生重复副作用） ——
 
 export interface EventRecord extends StoredSceneEvent {
