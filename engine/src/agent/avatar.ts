@@ -108,11 +108,11 @@ export function normalizeAvatarText(raw: string): string {
   return raw.normalize('NFKC').replace(/\s+/g, ' ').trim();
 }
 
-// —— 距离/角度钳制（合同 §3：distance 1..50，degrees -180..180） ——
+// —— 距离/角度钳制（合同 §3：distance 1..2000（默认 10；用户说了多少用多少），degrees -180..180） ——
 
 const clampNum = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x));
 export const DIST_MIN = 1;
-export const DIST_MAX = 50;
+export const DIST_MAX = 2000;
 const DIST_DEFAULT = 10;
 export const DEG_MIN = -180;
 export const DEG_MAX = 180;
@@ -275,6 +275,12 @@ function parseBareMove(text: string): AvatarCommand[] | null {
   if (BARE_TAKEOFF.test(bare)) return withIds([{ kind: 'move_relative', direction: 'up', distanceMeters: DIST_DEFAULT, movement: 'fly' }]);
   if (BARE_LAND.test(bare)) return withIds([{ kind: 'move_relative', direction: 'down', distanceMeters: DIST_DEFAULT, movement: 'fly' }]);
   if (BARE_HOVER.test(bare)) return withIds([{ kind: 'stop' }]);
+  // 「飞 150 米」：未说方向 = 沿当前朝向前向飞行
+  const flyM = bare.match(/^飞(?:行|往)?([0-9]+(?:\.[0-9]+)?)?米?$/);
+  if (flyM && flyM[1]) {
+    const requested = Number.parseFloat(flyM[1]);
+    if (Number.isFinite(requested)) return withIds([{ kind: 'move_relative', direction: 'forward', distanceMeters: clampNum(requested, DIST_MIN, DIST_MAX), movement: 'fly' }]);
+  }
   for (const [re, dir] of BARE_MOVE_RES) {
     const m = bare.match(re);
     if (!m) continue;

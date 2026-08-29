@@ -143,12 +143,15 @@ section('任务闭环：start_inspection / decide_pending / capture_evidence');
 }
 
 // ---------- 钳制与默认值 ----------
-section('钳制与默认（distance 1..50 默认 10；degrees -180..180）');
+section('钳制与默认（distance 1..2000 默认 10；degrees -180..180）');
 {
   ok(parseAvatarCommand('向前走')[0].distanceMeters === 10, '向前走（无数字）→ 默认 10 米');
-  ok(parseAvatarCommand('向前走 999 米')[0].distanceMeters === 50, '999 米 → 钳制 50');
+  ok(parseAvatarCommand('向前飞 300 米')[0].distanceMeters === 300, '说了 300 米就用 300（不钳 50）');
+  ok(parseAvatarCommand('向前走 999 米')[0].distanceMeters === 999, '999 米 → 999');
+  ok(parseAvatarCommand('向前走 3000 米')[0].distanceMeters === 2000, '3000 米 → 钳制 2000');
   ok(parseAvatarCommand('向前走 0 米')[0].distanceMeters === 1, '0 米 → 钳制 1');
   ok(parseAvatarCommand('向前走十米')[0].distanceMeters === 10, '中文数字「十米」→ 10');
+  ok(parseAvatarCommand('飞 150 米')[0].kind === 'move_relative' && parseAvatarCommand('飞 150 米')[0].direction === 'forward' && parseAvatarCommand('飞 150 米')[0].distanceMeters === 150 && parseAvatarCommand('飞 150 米')[0].movement === 'fly', '「飞 150 米」→ 前向飞行 150 米');
   ok(parseAvatarCommand('左转')[0].degrees === -90, '左转（无角度）→ 默认 -90');
   ok(parseAvatarCommand('左转 270 度')[0].degrees === -180, '270 度 → 钳制 -180');
   ok(parseAvatarCommand('右转 270 度')[0].degrees === 180, '右转 270 度 → 钳制 180');

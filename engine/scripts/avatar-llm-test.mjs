@@ -142,7 +142,7 @@ section('非法输出整条拒绝 → 回退确定性（reason=LLM_VALIDATION_FA
   await expectFallback('未登记 targetId', mockContent([{ kind: 'navigate', targetId: 'MARS-01', movement: 'walk' }]), 'TARGET');
   await expectFallback('未知 kind+脚本注入', mockContent([{ kind: 'run_script', script: 'viewer.destroy()' }]), 'KIND');
   await expectFallback('携带 commandId 多余字段', mockContent([{ kind: 'stop', commandId: 'hijack-1' }]), 'FIELDS');
-  await expectFallback('distance 超界(80)', mockContent([{ kind: 'move_relative', direction: 'forward', distanceMeters: 80, movement: 'walk' }]), 'DISTANCE');
+  await expectFallback('distance 超界(5000)', mockContent([{ kind: 'move_relative', direction: 'forward', distanceMeters: 5000, movement: 'walk' }]), 'DISTANCE');
   await expectFallback('distance 非数值', mockContent([{ kind: 'move_relative', direction: 'forward', distanceMeters: '10', movement: 'walk' }]), 'DISTANCE');
   await expectFallback('degrees 超界(270)', mockContent([{ kind: 'turn', degrees: 270 }]), 'DEGREES');
   await expectFallback('up 必须 fly', mockContent([{ kind: 'move_relative', direction: 'up', distanceMeters: 10, movement: 'walk' }]), 'MOVEMENT_FLY');

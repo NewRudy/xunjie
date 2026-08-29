@@ -76,7 +76,7 @@ type AvatarCommand =
 
 约束：
 
-- `distanceMeters` 默认 10，服务端钳制到 `1..50`。
+- `distanceMeters` 默认 10，服务端钳制到 `1..2000`（说了多少用多少；适配风电大尺度场景）。
 - `turn.degrees` 只允许 `-180..180`。
 - `up/down` 必须使用 `movement: 'fly'`。
 - 新指令可以中断当前纯数字移动；`stop` 立即停止。
@@ -128,6 +128,8 @@ type AvatarCommand =
 
 浏览器首版采用 Web Speech API（`zh-CN`）作为可选适配层：必须由用户点击后启动，显示听写状态和最终转写；浏览器不支持或权限失败时明确提示并保留文字输入。ASR 结果不得直接调用 Cesium 或绕过审批，仍先进入本合同的解释接口。
 
+输出侧语音播报（2026-08-29 风电页上线）同属浏览器本地适配层：Web Speech API `speechSynthesis`（`zh-CN`）朗读后端 `reply` 与澄清消息，不联网、不调用云端 TTS；首次发声必须在用户手势链路内，前端提供明显开关并如实标注「浏览器本地 TTS」。播报内容仅以本合同接口的响应为源，不得合成接口之外的承诺性话术；语音缺失/失败不影响文字链路的完整性。
+
 ## 8. 任务闭环语言验收
 
 1. “检查 B2 屋顶异常”创建现有异常任务并显示上下文与建议。
@@ -177,4 +179,12 @@ type AvatarCommand =
 - 场景命令（navigate/focus_asset/repair_simulation/运动类）**原样透传**由前端执行（渲染层职责）；审批签发的 `pendingCommands` 仍随任务快照下发。
 - **风电场景闭环命令显式拒绝**（`UNSUPPORTED_IN_SCENE`），场景命令不受影响。
 - 响应顶层 `status`：`available` / `partial`（部分闭环被拒）/ `rejected`（全部闭环被拒）；澄清语义与 §2 相同（400 CLARIFICATION_NEEDED）。
-- 本接口只加不减：`/avatar/interpret` 合同不变。验收套件 `pnpm test:dispatch`（29 项，真实 engine 实例）。
+- 本接口只加不减：`/avatar/interpret` 合同不变。验收套件 `pnpm test:dispatch`（35 项，真实 engine 实例）。
+
+### 10.1 会话与 trace（P2，2026-08-29）
+
+- 入参可带 `conversationId`（缺省 `CONV-DEMO`）：轮次摘要（`agent_turns`）与逐节点 trace（`agent_trace`）按会话聚合入库。
+- 最近 2 轮结构化摘要（仅 `text` + 命令 `kind/targetId`，**不含模型原文**）注入 LLM 解释 prompt；确定性回退路径不消费历史——无凭据时多轮指代（"再回来"一类）不生效，属已知边界。
+- 响应携带 `conversationId` 与 `trace[]`（每节点 `{ label, status: ok|warn|error, durationMs, detail? }`，以「总计」收尾；detail 只给 planner.mode 或错误类型码，不含密钥/请求体）。
+- 演示复位（`/api/debug/reset` 与 start_inspection 前置复位）同步清空会话轮次与 trace。
+- 路由正确性另有离线评测守门：`pnpm test:evals`（39 条固定语料，覆盖双场景路由、未知澄清与跨场景泄漏；语料低于规模下限直接判失败）。
