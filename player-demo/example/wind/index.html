@@ -58,31 +58,18 @@
         .hud-warn { color: #ffb86b; }
         .hud-hidden { display: none !important; }
 
-        #cmd-form { display: flex; gap: 6px; margin: 8px 0 8px; }
-        #cmd-input {
-            flex: 1;
-            min-width: 0;
-            padding: 7px 9px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.22);
-            background: rgba(255, 255, 255, 0.08);
-            color: #f2f7ff;
-            font-size: 13px;
-            outline: none;
-        }
-        #cmd-input:focus { border-color: rgba(97, 218, 251, 0.7); }
-        #cmd-input::placeholder { color: #7d8da1; font-size: 12px; }
-        #cmd-send {
-            padding: 7px 14px;
-            border: none;
-            border-radius: 6px;
-            background: #1e88e5;
-            color: #fff;
-            font-size: 13px;
-            font-weight: 700;
+        .hud-toggle {
+            padding: 2px 9px;
+            border-radius: 4px;
+            border: 1px solid rgba(97, 218, 251, 0.45);
+            background: rgba(97, 218, 251, 0.1);
+            color: #9be2f5;
+            font-size: 11px;
             cursor: pointer;
+            white-space: nowrap;
         }
-        #cmd-send:hover { background: #42a5f5; }
+        .hud-toggle:hover { border-color: rgba(97, 218, 251, 0.8); }
+        .hud-toggle.off { color: #7d8da1; border-color: rgba(255, 255, 255, 0.18); background: transparent; }
 
         #cmd-log {
             overflow-y: auto;
@@ -91,6 +78,7 @@
             gap: 8px;
             font-size: 12px;
             line-height: 1.5;
+            margin-top: 8px;
         }
         .log-entry { border-top: 1px dashed rgba(255, 255, 255, 0.14); padding-top: 6px; }
         .log-time { color: #7d8da1; margin-right: 6px; }
@@ -205,6 +193,457 @@
         /* 维修进度面板与返回链接同侧，避免重叠 */
         #repair-panel:not([hidden]) ~ .back-link { bottom: 190px; }
 
+        /* ══════════ AI 悬浮球 + 对话面板（移植自黔风智维 v2 AssistantPanel，原生实现） ══════════ */
+        .assistant-shell {
+            --ai-fg: oklch(0.93 0.008 220);
+            --ai-muted: oklch(0.68 0.015 225);
+            --ai-faint: oklch(0.52 0.015 228);
+            --ai-border: oklch(0.38 0.020 230 / 0.55);
+            --ai-hairline: oklch(0.32 0.02 232 / 0.35);
+            --ai-accent: oklch(0.74 0.080 200);
+            --ai-accent-dim: oklch(0.74 0.080 200 / 0.14);
+            --font-mono: ui-monospace, Menlo, Consolas, monospace;
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            pointer-events: none;
+        }
+        .assistant-shell > * { pointer-events: auto; }
+
+        /* ---------- 悬浮球 ---------- */
+        .assistant-orb {
+            position: absolute;
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            z-index: 70;
+            cursor: pointer;
+            appearance: none;
+            padding: 0;
+            overflow: visible;
+            isolation: isolate;
+            background:
+                radial-gradient(circle at 50% 44%, color-mix(in oklab, var(--orb-primary) 48%, transparent) 0 12%, color-mix(in oklab, var(--orb-primary) 18%, transparent) 34%, transparent 64%),
+                conic-gradient(from 18deg, color-mix(in oklab, var(--orb-primary) 10%, transparent), color-mix(in oklab, var(--orb-secondary) 48%, transparent), color-mix(in oklab, var(--orb-primary) 9%, transparent) 48%, color-mix(in oklab, var(--orb-primary) 38%, transparent), color-mix(in oklab, var(--orb-primary) 10%, transparent));
+            border: 1px solid color-mix(in oklab, var(--orb-primary) 64%, transparent);
+            backdrop-filter: blur(10px);
+            box-shadow:
+                0 0 0 1px color-mix(in oklab, var(--orb-primary) 16%, transparent),
+                0 0 18px color-mix(in oklab, var(--orb-primary) 26%, transparent),
+                0 8px 22px rgba(0, 0, 0, 0.42),
+                inset 0 1px 0 rgba(235, 255, 255, 0.38),
+                inset 0 -9px 18px rgba(0, 0, 0, 0.24);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #eaffff;
+            --orb-primary: #43c9e8;
+            --orb-secondary: #789fd9;
+            --orb-hot: #d8f5ff;
+            transition: transform 180ms ease, border-color 180ms ease, filter 180ms ease, box-shadow 180ms ease;
+        }
+        .assistant-orb:hover {
+            transform: scale(1.08);
+            filter: brightness(1.12) saturate(1.08);
+            border-color: var(--orb-primary);
+        }
+        .assistant-orb.is-dragging {
+            transform: scale(1.12);
+            cursor: grabbing;
+            filter: brightness(1.18) saturate(1.12);
+            box-shadow:
+                0 0 0 1px color-mix(in oklab, var(--orb-primary) 28%, transparent),
+                0 0 30px color-mix(in oklab, var(--orb-primary) 42%, transparent),
+                0 12px 26px rgba(0, 0, 0, 0.46),
+                inset 0 1px 0 rgba(235, 255, 255, 0.5),
+                inset 0 -9px 18px rgba(0, 0, 0, 0.2);
+        }
+        .assistant-orb::before,
+        .assistant-orb::after {
+            content: "";
+            position: absolute;
+            pointer-events: none;
+            border-radius: 50%;
+        }
+        .assistant-orb::before {
+            inset: -7px;
+            border: 1px solid color-mix(in oklab, var(--orb-primary) 33%, transparent);
+            border-left-color: transparent;
+            border-bottom-color: color-mix(in oklab, var(--orb-secondary) 54%, transparent);
+            animation: assistant-orb-spin 8s linear infinite;
+        }
+        .assistant-orb::after {
+            inset: -13px;
+            border: 1px dashed color-mix(in oklab, var(--orb-primary) 17%, transparent);
+            border-top-color: color-mix(in oklab, var(--orb-secondary) 42%, transparent);
+            transform: rotate(-25deg);
+            animation: assistant-orb-spin-reverse 13s linear infinite;
+        }
+        .assistant-orb__aura,
+        .assistant-orb__ring,
+        .assistant-orb__orbit,
+        .assistant-orb__particle,
+        .assistant-orb__core,
+        .assistant-orb__glyph {
+            position: absolute;
+            pointer-events: none;
+        }
+        .assistant-orb__aura {
+            inset: 8px;
+            z-index: 0;
+            border-radius: 50%;
+            background: radial-gradient(circle, color-mix(in oklab, var(--orb-primary) 35%, transparent), transparent 68%);
+            filter: blur(4px);
+            animation: assistant-orb-pulse 2.8s ease-in-out infinite;
+        }
+        .assistant-orb__ring {
+            inset: 2px;
+            z-index: 1;
+            border: 1px solid color-mix(in oklab, var(--orb-primary) 48%, transparent);
+            border-radius: 50%;
+        }
+        .assistant-orb__ring--outer {
+            border-top-color: transparent;
+            border-right-color: color-mix(in oklab, var(--orb-secondary) 70%, transparent);
+            transform: rotate(-20deg);
+            animation: assistant-orb-spin 6s linear infinite;
+        }
+        .assistant-orb__ring--inner {
+            inset: 9px;
+            border-color: color-mix(in oklab, var(--orb-secondary) 48%, transparent);
+            border-right-color: transparent;
+            border-bottom-color: color-mix(in oklab, var(--orb-primary) 72%, transparent);
+            animation: assistant-orb-spin-reverse 4.5s linear infinite;
+        }
+        .assistant-orb__orbit {
+            left: 50%;
+            top: 50%;
+            width: 38px;
+            height: 13px;
+            z-index: 2;
+            margin: -6.5px 0 0 -19px;
+            border: 1px solid color-mix(in oklab, var(--orb-primary) 40%, transparent);
+            border-radius: 50%;
+        }
+        .assistant-orb__orbit--one { transform: rotate(32deg); animation: assistant-orb-orbit 7s linear infinite; }
+        .assistant-orb__orbit--two {
+            border-color: color-mix(in oklab, var(--orb-secondary) 40%, transparent);
+            transform: rotate(-32deg);
+            animation: assistant-orb-orbit-reverse 9s linear infinite;
+        }
+        .assistant-orb__core {
+            left: 50%;
+            top: 50%;
+            width: 23px;
+            height: 23px;
+            z-index: 3;
+            margin: -11.5px 0 0 -11.5px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 38% 32%, #f5ffff 0 8%, var(--orb-primary) 25%, color-mix(in oklab, var(--orb-primary) 42%, #07151c) 65%, #061219 100%);
+            box-shadow: 0 0 8px color-mix(in oklab, var(--orb-primary) 86%, transparent), 0 0 20px color-mix(in oklab, var(--orb-primary) 48%, transparent);
+        }
+        .assistant-orb__core::before {
+            content: "";
+            position: absolute;
+            inset: 3px;
+            border: 1px solid rgba(238, 255, 255, 0.68);
+            border-radius: 50%;
+            opacity: 0.76;
+            animation: assistant-orb-core-pulse 1.9s ease-in-out infinite;
+        }
+        .assistant-orb__core::after {
+            content: "";
+            position: absolute;
+            left: 3px;
+            right: 3px;
+            top: 10px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(240, 255, 255, 0.9), transparent);
+            animation: assistant-orb-scan 1.9s ease-in-out infinite;
+        }
+        .assistant-orb__core i {
+            position: absolute;
+            inset: 8px;
+            border-radius: 50%;
+            background: rgba(238, 255, 255, 0.85);
+            box-shadow: 0 0 8px rgba(238, 255, 255, 0.95);
+        }
+        .assistant-orb__glyph {
+            left: 50%;
+            top: 50%;
+            z-index: 4;
+            width: 18px;
+            height: 18px;
+            margin: -9px 0 0 -9px;
+            color: #ecffff;
+            filter: drop-shadow(0 0 5px color-mix(in oklab, var(--orb-primary) 82%, transparent));
+            opacity: 0.9;
+        }
+        .assistant-orb__particle {
+            width: 3px;
+            height: 3px;
+            z-index: 4;
+            border-radius: 50%;
+            background: var(--orb-hot);
+            box-shadow: 0 0 6px color-mix(in oklab, var(--orb-hot) 90%, transparent);
+        }
+        .assistant-orb__particle--one { top: 5px; right: 14px; animation: assistant-orb-drift-one 3.2s ease-in-out infinite; }
+        .assistant-orb__particle--two { left: 11px; bottom: 9px; animation: assistant-orb-drift-two 3.8s ease-in-out infinite; }
+
+        @keyframes assistant-orb-spin { to { transform: rotate(340deg); } }
+        @keyframes assistant-orb-spin-reverse { to { transform: rotate(-385deg); } }
+        @keyframes assistant-orb-orbit {
+            0%, 100% { transform: rotate(32deg) scaleX(1); }
+            50% { transform: rotate(212deg) scaleX(0.86); }
+        }
+        @keyframes assistant-orb-orbit-reverse {
+            0%, 100% { transform: rotate(-32deg) scaleX(1); }
+            50% { transform: rotate(-212deg) scaleX(0.86); }
+        }
+        @keyframes assistant-orb-pulse {
+            0%, 100% { opacity: 0.55; transform: scale(0.92); }
+            50% { opacity: 0.95; transform: scale(1.06); }
+        }
+        @keyframes assistant-orb-core-pulse {
+            0%, 100% { transform: scale(0.72); opacity: 0.46; }
+            50% { transform: scale(1.1); opacity: 0.9; }
+        }
+        @keyframes assistant-orb-scan {
+            0%, 100% { transform: translateY(-5px); opacity: 0.2; }
+            50% { transform: translateY(5px); opacity: 0.92; }
+        }
+        @keyframes assistant-orb-drift-one {
+            0%, 100% { transform: translate(0, 0); opacity: 0.55; }
+            50% { transform: translate(4px, -3px); opacity: 1; }
+        }
+        @keyframes assistant-orb-drift-two {
+            0%, 100% { transform: translate(0, 0); opacity: 0.35; }
+            50% { transform: translate(-3px, 4px); opacity: 0.95; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .assistant-orb *,
+            .assistant-orb::before,
+            .assistant-orb::after { animation: none !important; }
+        }
+
+        /* ---------- 对话面板：双层渐变 + 斜切轮廓 ---------- */
+        .assistant-panel {
+            position: absolute;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            color: var(--ai-fg);
+            border: none;
+            background: transparent;
+            filter: drop-shadow(0 16px 40px rgba(0, 0, 0, 0.50));
+            clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+        }
+        .assistant-shell[data-open="true"] .assistant-panel { display: flex; }
+        .assistant-panel::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: -2;
+            background: linear-gradient(180deg, oklch(0.52 0.028 226 / 0.62), oklch(0.38 0.022 230 / 0.40));
+            clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+        }
+        .assistant-panel::after {
+            content: "";
+            position: absolute;
+            inset: 1px;
+            z-index: -1;
+            background: oklch(0.185 0.018 234 / 0.88);
+            backdrop-filter: blur(14px);
+            clip-path: polygon(8.6px 0, 100% 0, 100% calc(100% - 8.6px), calc(100% - 8.6px) 100%, 0 100%, 0 8.6px);
+        }
+        .assistant-panel-head {
+            flex: none;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 11px 14px 10px;
+            cursor: move;
+            user-select: none;
+            position: relative;
+            background: oklch(0.27 0.022 232 / 0.20);
+            clip-path: polygon(8.6px 0, 100% 0, 100% 100%, 0 100%, 0 8.6px);
+        }
+        .assistant-panel-head::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 1px;
+            background: linear-gradient(90deg, oklch(0.74 0.08 200 / 0.42) 0%, oklch(0.50 0.03 225 / 0.26) 34%, oklch(0.45 0.03 225 / 0.04) 100%);
+        }
+        .assistant-grip {
+            width: 8px;
+            height: 12px;
+            flex: none;
+            opacity: 0.45;
+            background-image: radial-gradient(oklch(0.62 0.015 225) 1px, transparent 1.3px);
+            background-size: 6px 5px;
+        }
+        .assistant-title { font-size: 14px; font-weight: 600; letter-spacing: 0.1em; }
+        .assistant-context {
+            margin-left: auto;
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 11px;
+            color: var(--ai-accent);
+            background: var(--ai-accent-dim);
+            border: 1px solid oklch(0.60 0.07 200 / 0.5);
+            padding: 2px 8px;
+            border-radius: 2px;
+            font-family: var(--font-mono);
+        }
+        .assistant-head-btn,
+        .assistant-close {
+            margin-left: 6px;
+            width: 22px;
+            height: 22px;
+            flex: none;
+            border: none;
+            background: none;
+            color: var(--ai-faint);
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .assistant-head-btn:hover,
+        .assistant-close:hover { color: var(--ai-fg); }
+        .assistant-head-btn[aria-pressed="true"] { color: var(--ai-accent); }
+        .assistant-head-btn:disabled { color: var(--ai-faint); opacity: 0.5; cursor: not-allowed; }
+        .assistant-close { font-size: 18px; }
+
+        .assistant-msgs {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            scrollbar-width: thin;
+            scrollbar-color: oklch(0.46 0.02 230 / 0.45) transparent;
+        }
+        .ai-welcome { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
+        .ai-welcome > strong { font-size: 15px; color: var(--ai-fg); }
+        .ai-welcome > p { margin: 0; font-size: 12px; color: var(--ai-muted); }
+        .ai-capabilities { margin: 0; padding-left: 18px; font-size: 12px; color: var(--ai-muted); line-height: 1.7; }
+
+        .assistant-quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 8px; flex: none; }
+        .assistant-quick button {
+            font-size: 12px;
+            color: var(--ai-muted);
+            background: transparent;
+            border: 1px solid var(--ai-hairline);
+            border-radius: 2px;
+            padding: 4px 9px;
+            cursor: pointer;
+            letter-spacing: 0.03em;
+            transition: border-color 180ms ease, color 180ms ease;
+        }
+        .assistant-quick button:hover { color: var(--ai-accent); border-color: oklch(0.60 0.07 200 / 0.6); }
+
+        .ai-msg { display: flex; gap: 8px; align-items: flex-start; }
+        .ai-msg.user { flex-direction: row-reverse; }
+        .ai-av {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            flex: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+        }
+        .ai-msg.bot .ai-av {
+            background: var(--ai-accent-dim);
+            color: var(--ai-accent);
+            border: 1px solid oklch(0.60 0.07 200 / 0.5);
+        }
+        .ai-msg.user .ai-av { background: oklch(0.32 0.02 232 / 0.7); color: var(--ai-muted); }
+        .ai-bubble {
+            flex: 1;
+            min-width: 0;
+            padding: 8px 11px;
+            border-radius: 3px;
+            border: 1px solid var(--ai-hairline);
+            background: oklch(0.24 0.02 233 / 0.55);
+        }
+        .ai-msg.user .ai-bubble { background: oklch(0.28 0.02 232 / 0.35); }
+        .ai-tx {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.7;
+            color: var(--ai-fg);
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+        .ai-msg.user .ai-tx { color: var(--ai-muted); }
+        .ai-turn-tools {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--ai-hairline);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .ai-turn-facts { margin: 0; font-size: 12px; color: var(--ai-muted); }
+        .ai-cmds { display: flex; gap: 6px; flex-wrap: wrap; }
+        .ai-trace { font-size: 11px; color: var(--ai-muted); }
+        .ai-trace summary { cursor: pointer; color: var(--ai-accent); list-style: none; }
+        .ai-trace summary::-webkit-details-marker { display: none; }
+        .ai-trace ul { margin: 6px 0 0; padding-left: 16px; }
+        .ai-trace li { margin-bottom: 3px; font-family: var(--font-mono); }
+        .ai-trace .t-ok { color: var(--ai-muted); }
+        .ai-trace .t-warn { color: #ffd479; }
+        .ai-trace .t-error { color: #ff7b7b; }
+
+        #cmd-form {
+            flex: none;
+            display: flex;
+            gap: 8px;
+            padding: 10px 14px 12px;
+            border-top: 1px solid var(--ai-hairline);
+            margin: 0;
+        }
+        #cmd-input {
+            flex: 1;
+            min-width: 0;
+            height: 30px;
+            background: oklch(0.14 0.015 236 / 0.8);
+            border: 1px solid var(--ai-border);
+            border-radius: 2px;
+            color: var(--ai-fg);
+            font-size: 13px;
+            padding: 0 10px;
+            outline: none;
+        }
+        #cmd-input:focus { border-color: oklch(0.60 0.07 200 / 0.6); }
+        #cmd-input::placeholder { color: var(--ai-faint); font-size: 12px; }
+        #cmd-send {
+            width: 52px;
+            height: 30px;
+            border-radius: 2px;
+            border: 1px solid oklch(0.60 0.07 200 / 0.6);
+            background: var(--ai-accent-dim);
+            color: var(--ai-accent);
+            font-size: 13px;
+            cursor: pointer;
+            letter-spacing: 0.06em;
+        }
+        #cmd-send:hover { filter: brightness(1.2); }
+
         @media (max-width: 900px) {
             #credits-footer { display: none; }
         }
@@ -217,15 +656,12 @@
         <div class="hud-header">
             <span class="hud-title">巡界 XUNJIE · 风电工程场景（老鸦岭）</span>
             <span class="badge badge-sim">SIMULATED 演示仿真</span>
+            <button id="windfield-toggle" class="hud-toggle" type="button" title="GPU 粒子风场流线开关">风场流线：开</button>
         </div>
         <div id="collider-status" class="hud-sub">碰撞：初始化中…</div>
         <div id="engine-status" class="hud-sub hud-warn hud-hidden">引擎未连接（localhost:8787），仅可手动控制</div>
         <div id="exec-status" class="hud-sub">执行器：待命（WASD 移动 / Shift 冲刺 / Space 跳跃 / F 飞行 / V 视角）</div>
-        <form id="cmd-form" autocomplete="off">
-            <input id="cmd-input" type="text"
-                placeholder="试试：飞到 7 号风机 / 维修 7 号风机 / 跑到 2 号风机 / 回运维点 / 停下" />
-            <button id="cmd-send" type="submit">发送</button>
-        </form>
+        <div class="hud-sub">指挥入口：右下角悬浮球 AI 面板 · 语音播报：浏览器本地 TTS</div>
         <div id="cmd-log"></div>
     </div>
 
@@ -257,6 +693,54 @@
     <div id="credits-footer"></div>
 
     <a class="back-link" href="../">← 返回首页</a>
+
+    <!-- AI 悬浮球 + 对话面板（指挥唯一入口） -->
+    <div class="assistant-shell" id="ai-shell" data-open="false">
+        <section class="assistant-panel" id="ai-panel" aria-label="巡界 AI 助手">
+            <header class="assistant-panel-head" id="ai-panel-head">
+                <i class="assistant-grip" aria-hidden="true"></i>
+                <span class="assistant-title">巡界 AI 助手</span>
+                <span class="assistant-context" id="ai-context" title="风电工程场景（老鸦岭）">风电工程场景</span>
+                <div class="assistant-head-actions">
+                    <button type="button" class="assistant-head-btn" id="ai-tts"
+                        aria-label="语音播报开关" title="语音播报：开（浏览器本地 TTS）" aria-pressed="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="9" y="3" width="6" height="12" rx="3" />
+                            <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7" />
+                        </svg>
+                    </button>
+                    <button type="button" class="assistant-close" id="ai-close" aria-label="收起">×</button>
+                </div>
+            </header>
+            <div class="assistant-msgs" id="ai-msgs"></div>
+            <div class="assistant-quick" id="ai-quick">
+                <button type="button" data-q="飞到 7 号风机">飞到 7 号风机</button>
+                <button type="button" data-q="维修 7 号风机">维修 7 号风机</button>
+                <button type="button" data-q="查看 5 号风机">查看 5 号风机</button>
+                <button type="button" data-q="回运维点">回运维点</button>
+            </div>
+            <form id="cmd-form" autocomplete="off">
+                <input id="cmd-input" type="text" maxlength="1000"
+                    placeholder="指挥数字运维员：导航 / 维修 / 查看…" />
+                <button id="cmd-send" type="submit">发送</button>
+            </form>
+        </section>
+        <button type="button" class="assistant-orb" id="ai-orb" aria-expanded="false" aria-label="打开巡界 AI 助手">
+            <span class="assistant-orb__aura" aria-hidden="true"></span>
+            <span class="assistant-orb__ring assistant-orb__ring--outer" aria-hidden="true"></span>
+            <span class="assistant-orb__ring assistant-orb__ring--inner" aria-hidden="true"></span>
+            <span class="assistant-orb__orbit assistant-orb__orbit--one" aria-hidden="true"></span>
+            <span class="assistant-orb__orbit assistant-orb__orbit--two" aria-hidden="true"></span>
+            <span class="assistant-orb__particle assistant-orb__particle--one" aria-hidden="true"></span>
+            <span class="assistant-orb__particle assistant-orb__particle--two" aria-hidden="true"></span>
+            <span class="assistant-orb__core" aria-hidden="true"><i></i></span>
+            <svg class="assistant-orb__glyph" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3 L13.6 9.4 L20 11 L13.6 12.6 L12 19 L10.4 12.6 L4 11 L10.4 9.4 Z"
+                    stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+            </svg>
+        </button>
+    </div>
 
     <script type="module" src="./index.ts"></script>
 </body>

@@ -7,6 +7,8 @@ import {
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import { playerController } from "cesium-player-controller";
 import type { ColliderSource } from "cesium-player-controller";
+import { createWindFieldLayer } from "./windFieldLayer";
+import { WIND_FIELD_CONFIG } from "./windFieldConfig";
 
 // ==================== fixture 类型 ====================
 
@@ -58,6 +60,13 @@ interface MissionBrief {
     phase?: string;
     receipt?: { kind?: string } | null;
 }
+// dispatch 逐节点 trace（engine/src/agent/dispatch.ts TraceStep）
+interface TraceStep {
+    label: string;
+    status: "ok" | "warn" | "error";
+    durationMs: number;
+    detail?: string;
+}
 interface InterpretResponse {
     status?: string;
     data?: {
@@ -66,6 +75,8 @@ interface InterpretResponse {
         commands?: AvatarCommand[];
         dispatch?: DispatchOutcome[];
         mission?: MissionBrief | null;
+        conversationId?: string;
+        trace?: TraceStep[];
     };
     planner?: { mode?: "llm" | "deterministic-fallback"; modelAvailable?: boolean; reason?: string };
     truth?: string;
@@ -77,6 +88,8 @@ interface InterpretResponse {
 const BASE = import.meta.env.BASE_URL;
 // dispatch：解释与闭环执行同端点（服务端编排收权）；风电场景闭环命令由后端显式拒绝，页面如实展示
 const ENGINE_URL = "http://localhost:8787/api/agent/avatar/dispatch";
+// dispatch P2 会话：轮次摘要与 trace 按会话聚合
+const CONVERSATION_ID = "CONV-WIND-DEMO";
 const DISPATCH_LABEL: Record<string, string> = {
     start_inspection: "创建巡检任务",
     decide_pending: "审批",
@@ -107,10 +120,248 @@ const repairBar = el<HTMLDivElement>("repair-bar");
 const repairStepsEl = el<HTMLOListElement>("repair-steps");
 const repairRecord = el<HTMLDivElement>("repair-record");
 const recordBody = el<HTMLDivElement>("record-body");
+const aiShell = el<HTMLDivElement>("ai-shell");
+const aiOrb = el<HTMLButtonElement>("ai-orb");
+const aiPanel = el<HTMLElement>("ai-panel");
+const aiPanelHead = el<HTMLElement>("ai-panel-head");
+const aiMsgs = el<HTMLDivElement>("ai-msgs");
+const aiTtsBtn = el<HTMLButtonElement>("ai-tts");
+const aiClose = el<HTMLButtonElement>("ai-close");
 
 // 输入框按键不冒泡，避免触发人物键位
 for (const type of ["keydown", "keyup", "keypress"]) {
     cmdInput.addEventListener(type, (e) => e.stopPropagation());
+}
+
+// ==================== AI 悬浮球 + 对话面板（指挥唯一入口） ====================
+
+const ORB_SIZE = 58;
+const PANEL_W = 440;
+const PANEL_H = 520;
+const DRAG_THRESHOLD = 6;
+const ORB_POS_KEY = "xj-wind-orb-pos";
+const PANEL_POS_KEY = "xj-wind-panel-pos";
+
+function clampNum(v: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, v));
+}
+function loadPos(key: string): { x: number; y: number } | null {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const p = JSON.parse(raw) as { x?: unknown; y?: unknown };
+        if (typeof p.x === "number" && typeof p.y === "number") return { x: p.x, y: p.y };
+    } catch { /* 忽略损坏的本地存储 */ }
+    return null;
+}
+function savePos(key: string, p: { x: number; y: number }): void {
+    try { localStorage.setItem(key, JSON.stringify(p)); } catch { /* 隐私模式等场景忽略 */ }
+}
+
+// 面板跟随悬浮球：球在左半屏 → 面板弹右侧，反之左侧；垂直方向 clamp 进视口
+function panelPositionForOrb(p: { x: number; y: number }): { x: number; y: number } {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const orbCenterX = p.x + ORB_SIZE / 2;
+    const x = orbCenterX < vw / 2 ? p.x + ORB_SIZE + 14 : p.x - PANEL_W - 14;
+    const y = p.y + ORB_SIZE / 2 - PANEL_H / 2;
+    return {
+        x: clampNum(x, 8, Math.max(8, vw - PANEL_W - 8)),
+        y: clampNum(y, 8, Math.max(8, vh - PANEL_H - 8)),
+    };
+}
+
+let orbPos = loadPos(ORB_POS_KEY) ?? { x: window.innerWidth - ORB_SIZE - 20, y: window.innerHeight - ORB_SIZE - 20 };
+let panelFollowOrb = true;
+let panelPos = loadPos(PANEL_POS_KEY) ?? panelPositionForOrb(orbPos);
+
+function applyOrbPos(): void {
+    aiOrb.style.left = `${orbPos.x}px`;
+    aiOrb.style.top = `${orbPos.y}px`;
+}
+function applyPanelPos(): void {
+    aiPanel.style.left = `${panelPos.x}px`;
+    aiPanel.style.top = `${panelPos.y}px`;
+    aiPanel.style.width = `${PANEL_W}px`;
+    aiPanel.style.height = `${PANEL_H}px`;
+}
+applyOrbPos();
+applyPanelPos();
+
+let aiOpen = false;
+function openPanel(): void {
+    aiOpen = true;
+    panelFollowOrb = true;
+    panelPos = panelPositionForOrb(orbPos);
+    applyPanelPos();
+    aiShell.dataset.open = "true";
+    aiOrb.setAttribute("aria-expanded", "true");
+    aiOrb.setAttribute("aria-label", "收起巡界 AI 助手");
+}
+function closePanel(): void {
+    aiOpen = false;
+    aiShell.dataset.open = "false";
+    aiOrb.setAttribute("aria-expanded", "false");
+    aiOrb.setAttribute("aria-label", "打开巡界 AI 助手");
+}
+
+// 开合走原生 click：真实点击在 pointerup 后触发，CDP/脚本的 el.click() 同样生效；
+// 拖拽（位移超过阈值）结束时置 suppress 标志，抑制紧随其后的 click。
+let suppressOrbClick = false;
+aiOrb.addEventListener("click", () => {
+    if (suppressOrbClick) { suppressOrbClick = false; return; }
+    if (aiOpen) closePanel(); else openPanel();
+});
+
+let orbDragging = false;
+let orbDragStartX = 0;
+let orbDragStartY = 0;
+let orbDragMoved = false;
+
+aiOrb.addEventListener("pointerdown", (e) => {
+    orbDragging = true;
+    orbDragMoved = false;
+    orbDragStartX = e.clientX;
+    orbDragStartY = e.clientY;
+    aiOrb.classList.add("is-dragging");
+    window.addEventListener("pointermove", onOrbMove);
+    window.addEventListener("pointerup", onOrbUp);
+    window.addEventListener("pointercancel", onOrbUp);
+});
+function onOrbMove(e: PointerEvent): void {
+    if (!orbDragging) return;
+    if (Math.hypot(e.clientX - orbDragStartX, e.clientY - orbDragStartY) > DRAG_THRESHOLD) orbDragMoved = true;
+    orbPos = {
+        x: clampNum(e.clientX - ORB_SIZE / 2, 8, Math.max(8, window.innerWidth - ORB_SIZE - 8)),
+        y: clampNum(e.clientY - ORB_SIZE / 2, 8, Math.max(8, window.innerHeight - ORB_SIZE - 8)),
+    };
+    applyOrbPos();
+    if (panelFollowOrb) { panelPos = panelPositionForOrb(orbPos); applyPanelPos(); }
+}
+function onOrbUp(): void {
+    if (!orbDragging) return;
+    orbDragging = false;
+    aiOrb.classList.remove("is-dragging");
+    window.removeEventListener("pointermove", onOrbMove);
+    window.removeEventListener("pointerup", onOrbUp);
+    window.removeEventListener("pointercancel", onOrbUp);
+    savePos(ORB_POS_KEY, orbPos);
+    if (orbDragMoved) suppressOrbClick = true;
+}
+
+// 面板头部拖拽（脱离跟随，位置独立记忆）
+let panelDragging = false;
+let panelDragStartX = 0;
+let panelDragStartY = 0;
+let panelDragBaseX = 0;
+let panelDragBaseY = 0;
+aiPanelHead.addEventListener("pointerdown", (e) => {
+    if (e.target instanceof Element && e.target.closest("button, input, textarea, select, a")) return;
+    panelDragging = true;
+    panelFollowOrb = false;
+    panelDragStartX = e.clientX;
+    panelDragStartY = e.clientY;
+    panelDragBaseX = panelPos.x;
+    panelDragBaseY = panelPos.y;
+    window.addEventListener("pointermove", onPanelMove);
+    window.addEventListener("pointerup", onPanelUp);
+    window.addEventListener("pointercancel", onPanelUp);
+});
+function onPanelMove(e: PointerEvent): void {
+    if (!panelDragging) return;
+    panelPos = {
+        x: clampNum(panelDragBaseX + e.clientX - panelDragStartX, 8, Math.max(8, window.innerWidth - PANEL_W - 8)),
+        y: clampNum(panelDragBaseY + e.clientY - panelDragStartY, 8, Math.max(8, window.innerHeight - PANEL_H - 8)),
+    };
+    applyPanelPos();
+}
+function onPanelUp(): void {
+    if (!panelDragging) return;
+    panelDragging = false;
+    window.removeEventListener("pointermove", onPanelMove);
+    window.removeEventListener("pointerup", onPanelUp);
+    window.removeEventListener("pointercancel", onPanelUp);
+    savePos(PANEL_POS_KEY, panelPos);
+}
+
+aiClose.addEventListener("click", closePanel);
+
+window.addEventListener("resize", () => {
+    orbPos = {
+        x: clampNum(orbPos.x, 8, Math.max(8, window.innerWidth - ORB_SIZE - 8)),
+        y: clampNum(orbPos.y, 8, Math.max(8, window.innerHeight - ORB_SIZE - 8)),
+    };
+    applyOrbPos();
+    panelPos = panelFollowOrb ? panelPositionForOrb(orbPos) : {
+        x: clampNum(panelPos.x, 8, Math.max(8, window.innerWidth - PANEL_W - 8)),
+        y: clampNum(panelPos.y, 8, Math.max(8, window.innerHeight - PANEL_H - 8)),
+    };
+    applyPanelPos();
+});
+
+// ---------- 浏览器本地 TTS 语音播报 ----------
+const TTS_KEY = "xj-wind-tts-enabled";
+const ttsSupported = "speechSynthesis" in window;
+let ttsEnabled = ttsSupported && localStorage.getItem(TTS_KEY) !== "0";
+
+function speak(text: string): void {
+    if (!ttsSupported || !ttsEnabled || !text) return;
+    // e2e 探针：最近一次实际播报文本
+    (window as unknown as { __lastSpoken?: string }).__lastSpoken = text;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "zh-CN";
+    window.speechSynthesis.speak(utter);
+}
+
+function syncTtsButton(): void {
+    aiTtsBtn.setAttribute("aria-pressed", String(ttsEnabled));
+    aiTtsBtn.title = ttsSupported
+        ? `语音播报：${ttsEnabled ? "开" : "关"}（浏览器本地 TTS）`
+        : "本浏览器不支持语音播报";
+}
+if (!ttsSupported) aiTtsBtn.disabled = true;
+aiTtsBtn.addEventListener("click", () => {
+    if (!ttsSupported) return;
+    ttsEnabled = !ttsEnabled;
+    try { localStorage.setItem(TTS_KEY, ttsEnabled ? "1" : "0"); } catch { /* ignore */ }
+    if (!ttsEnabled) window.speechSynthesis.cancel();
+    syncTtsButton();
+});
+syncTtsButton();
+
+// ---------- 面板消息 ----------
+function scrollAiToBottom(): void {
+    aiMsgs.scrollTop = aiMsgs.scrollHeight;
+}
+function clearAiWelcome(): void {
+    aiMsgs.querySelector(".ai-welcome")?.remove();
+}
+
+// 初始欢迎块
+{
+    const w = document.createElement("div");
+    w.className = "ai-welcome";
+    const title = document.createElement("strong");
+    title.textContent = "巡界 AI 助手";
+    const p = document.createElement("p");
+    p.textContent = "当前上下文：风电工程场景（老鸦岭 · SIMULATED 演示仿真）";
+    const ul = document.createElement("ul");
+    ul.className = "ai-capabilities";
+    for (const line of [
+        "中文指挥数字运维员移动 / 飞行 / 导航",
+        "发起维修仿真并留痕可追溯回执",
+        "查看风机信息与风险等级",
+        "回复支持浏览器本地语音播报（面板头部麦克风开关）",
+    ]) {
+        const li = document.createElement("li");
+        li.textContent = line;
+        ul.appendChild(li);
+    }
+    w.appendChild(title);
+    w.appendChild(p);
+    w.appendChild(ul);
+    aiMsgs.appendChild(w);
 }
 
 // ==================== Viewer（无 Ion、无世界地形、全本地内容） ====================
@@ -146,7 +397,11 @@ async function main() {
     // 1. 读取场景 fixture（唯一事实源）
     const farm: FarmFixture = await (await fetch(`${BASE}wind/farm.json`)).json();
 
-    el<HTMLDivElement>("credits-footer").innerHTML = farm.credits.map((c) => `<div>${c}</div>`).join("");
+    const creditsFooter = el<HTMLDivElement>("credits-footer");
+    creditsFooter.innerHTML = farm.credits.map((c) => `<div>${c}</div>`).join("");
+    const windCredit = document.createElement("div");
+    windCredit.textContent = "GPU 风场流线：cesium-wind-layer（MIT © Hongfa Qiu，vendor 拷贝）";
+    creditsFooter.appendChild(windCredit);
 
     const { origin } = farm;
     const localFrame = Transforms.eastNorthUpToFixedFrame(
@@ -308,6 +563,22 @@ async function main() {
         }
     }
     colliderStatusEl.textContent = `碰撞：${colliderDesc}`;
+
+    // 3b. GPU 粒子风场流线（移植自黔风智维；局部 ENU 模型采样成 lon/lat 纹理交给 GPU 积分渲染）
+    const windField = createWindFieldLayer({
+        viewer,
+        localFrame,
+        origin: { longitude: origin.lon, latitude: origin.lat, height: origin.heightM },
+        config: WIND_FIELD_CONFIG,
+        reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    });
+    const windToggleBtn = el<HTMLButtonElement>("windfield-toggle");
+    windToggleBtn.addEventListener("click", () => {
+        const next = !windField.isVisible();
+        windField.setVisible(next);
+        windToggleBtn.textContent = `风场流线：${next ? "开" : "关"}`;
+        windToggleBtn.classList.toggle("off", !next);
+    });
 
     // 第一人称时隐藏人物模型
     player.onViewChange = (isFirstPerson) => {
@@ -693,7 +964,7 @@ async function main() {
 
     function makeMoveRelative(cmd: AvatarCommand): Action {
         const dir = cmd.direction ?? "forward";
-        const meters = Math.max(1, Math.min(50, cmd.distanceMeters ?? 10));
+        const meters = Math.max(1, Math.min(2000, cmd.distanceMeters ?? 10));
         const movement: AvatarMovement = cmd.movement ?? (dir === "up" || dir === "down" ? "fly" : "walk");
         const start = playerLocal().clone();
         const yaw = player.getYaw();
@@ -919,6 +1190,129 @@ async function main() {
 
     // ==================== 引擎指令链路 ====================
 
+    // 悬浮球面板消息（HUD 指令日志 appendCommandLog 同步保留）
+    function appendAiUser(text: string) {
+        clearAiWelcome();
+        const row = document.createElement("div");
+        row.className = "ai-msg user";
+        const av = document.createElement("span");
+        av.className = "ai-av";
+        av.textContent = "值";
+        row.appendChild(av);
+        const bubble = document.createElement("div");
+        bubble.className = "ai-bubble";
+        const p = document.createElement("p");
+        p.className = "ai-tx";
+        p.textContent = text;
+        bubble.appendChild(p);
+        row.appendChild(bubble);
+        aiMsgs.appendChild(row);
+        scrollAiToBottom();
+    }
+
+    function appendAiBot(opts: {
+        reply: string;
+        plannerMode?: string;
+        commands?: AvatarCommand[];
+        outcomes?: DispatchOutcome[];
+        mission?: MissionBrief | null;
+        trace?: TraceStep[];
+        examples?: string[];
+        warnings?: string[];
+    }) {
+        clearAiWelcome();
+        const row = document.createElement("div");
+        row.className = "ai-msg bot";
+        const av = document.createElement("span");
+        av.className = "ai-av";
+        av.textContent = "AI";
+        row.appendChild(av);
+        const bubble = document.createElement("div");
+        bubble.className = "ai-bubble";
+        const p = document.createElement("p");
+        p.className = "ai-tx";
+        p.textContent = opts.reply;
+        bubble.appendChild(p);
+
+        const tools = document.createElement("div");
+        let hasTools = false;
+        if (opts.plannerMode) {
+            const badge = document.createElement("span");
+            const isLlm = opts.plannerMode === "llm";
+            badge.className = `badge ${isLlm ? "badge-llm" : "badge-fallback"}`;
+            badge.textContent = isLlm ? "大模型解释" : "确定性回退";
+            tools.appendChild(badge);
+            hasTools = true;
+        }
+        if (opts.commands?.length) {
+            const cmds = document.createElement("div");
+            cmds.className = "ai-cmds";
+            for (const c of opts.commands) {
+                const chip = document.createElement("span");
+                chip.className = "cmd-chip";
+                chip.textContent = describeCommand(c);
+                cmds.appendChild(chip);
+            }
+            tools.appendChild(cmds);
+            hasTools = true;
+        }
+        if (opts.outcomes?.length || opts.mission?.missionId) {
+            const facts = document.createElement("p");
+            facts.className = "ai-turn-facts";
+            const parts = (opts.outcomes ?? []).map((o) => {
+                const label = DISPATCH_LABEL[o.kind] ?? o.kind;
+                return o.status === "available"
+                    ? `服务端编排 · ${label}：已执行`
+                    : `服务端编排 · ${label}：未执行（${o.message ?? o.code ?? "失败"}）`;
+            });
+            const m = opts.mission;
+            if (m?.missionId) {
+                parts.push(`任务 ${m.missionId} · 阶段 ${m.phase ?? "未知"}${m.receipt?.kind === "mission_closed" ? " · 已闭环" : ""}`);
+            }
+            facts.textContent = parts.join("；");
+            tools.appendChild(facts);
+            hasTools = true;
+        }
+        if (opts.examples?.length) {
+            const ex = document.createElement("p");
+            ex.className = "ai-turn-facts";
+            ex.textContent = `示例：${opts.examples.join(" / ")}`;
+            tools.appendChild(ex);
+            hasTools = true;
+        }
+        if (opts.trace?.length) {
+            const det = document.createElement("details");
+            det.className = "ai-trace";
+            const sum = document.createElement("summary");
+            sum.textContent = `执行轨迹 trace（${opts.trace.length} 步）`;
+            det.appendChild(sum);
+            const ul = document.createElement("ul");
+            for (const s of opts.trace) {
+                const li = document.createElement("li");
+                li.className = `t-${s.status}`;
+                li.textContent = `${s.label} · ${s.status} · ${s.durationMs}ms${s.detail ? ` · ${s.detail}` : ""}`;
+                ul.appendChild(li);
+            }
+            det.appendChild(ul);
+            tools.appendChild(det);
+            hasTools = true;
+        }
+        if (opts.warnings?.length) {
+            const w = document.createElement("p");
+            w.className = "ai-turn-facts";
+            w.textContent = `警告：${opts.warnings.join("；")}`;
+            tools.appendChild(w);
+            hasTools = true;
+        }
+        if (hasTools) {
+            tools.className = "ai-turn-tools";
+            bubble.appendChild(tools);
+        }
+        row.appendChild(bubble);
+        aiMsgs.appendChild(row);
+        scrollAiToBottom();
+    }
+
     async function sendInstruction(text: string) {
         const time = nowTime();
         let res: Response;
@@ -926,23 +1320,44 @@ async function main() {
             res = await fetch(ENGINE_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, sceneId: farm.sceneId, sceneRevision: farm.sceneRevision }),
+                body: JSON.stringify({
+                    text,
+                    sceneId: farm.sceneId,
+                    sceneRevision: farm.sceneRevision,
+                    conversationId: CONVERSATION_ID,
+                }),
             });
         } catch (e) {
             console.warn("引擎连接失败:", e);
             engineStatusEl.classList.remove("hud-hidden");
-            appendCommandLog({ time, text, reply: "引擎未连接（localhost:8787），仅可手动控制" });
+            const reply = "引擎未连接（localhost:8787），仅可手动控制";
+            appendCommandLog({ time, text, reply });
+            appendAiBot({ reply });
+            speak(reply);
             return;
         }
         engineStatusEl.classList.add("hud-hidden");
         if (!res.ok) {
-            let body: { error?: { message?: string }; clarification?: { message?: string; examples?: string[] } } | null = null;
+            let body: {
+                error?: { message?: string };
+                clarification?: { message?: string; examples?: string[] };
+                trace?: TraceStep[];
+                planner?: { mode?: "llm" | "deterministic-fallback" };
+            } | null = null;
             try { body = await res.json(); } catch { body = null; }
+            const reply = body?.clarification?.message ?? body?.error?.message ?? `引擎返回 HTTP ${res.status}`;
             appendCommandLog({
                 time, text,
-                reply: body?.clarification?.message ?? body?.error?.message ?? `引擎返回 HTTP ${res.status}`,
+                reply,
                 examples: body?.clarification?.examples,
             });
+            appendAiBot({
+                reply,
+                examples: body?.clarification?.examples,
+                trace: body?.trace,
+                plannerMode: body?.planner?.mode,
+            });
+            speak(reply);
             return;
         }
         const body = (await res.json()) as InterpretResponse;
@@ -966,15 +1381,38 @@ async function main() {
             }
             appendCommandLog({ time, text: "服务端编排", reply: parts.join("；") });
         }
+        appendAiBot({
+            reply: body.data?.reply ?? "（无回复）",
+            plannerMode: body.planner?.mode,
+            commands,
+            outcomes,
+            mission,
+            trace: body.data?.trace,
+            warnings: body.warnings,
+        });
+        if (body.data?.reply) speak(body.data.reply);
         if (commands.length) executor.push(commands);
+    }
+
+    function submitText(raw: string) {
+        const text = raw.trim();
+        if (!text) return;
+        cmdInput.value = "";
+        appendAiUser(text);
+        void sendInstruction(text);
     }
 
     cmdForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        const text = cmdInput.value.trim();
-        if (!text) return;
-        cmdInput.value = "";
-        void sendInstruction(text);
+        submitText(cmdInput.value);
+    });
+
+    // 快捷指令 chips：直接发送（面板未展开时顺手展开）
+    document.querySelectorAll<HTMLButtonElement>("#ai-quick button[data-q]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            if (!aiOpen) openPanel();
+            submitText(btn.dataset.q ?? "");
+        });
     });
 
     // 信息卡关闭：同时恢复跟随视角、去掉高亮环
