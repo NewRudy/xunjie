@@ -5,7 +5,7 @@
 // 环境变量（全部可选；不设置则永远走确定性回退）：
 //   AGENT_LLM_API_KEY   API 密钥（Zhipu/Kimi/OpenAI-compatible 均用此名）
 //   AGENT_LLM_BASE_URL  默认 https://open.bigmodel.cn/api/paas/v4（智谱）；Kimi 用 https://api.moonshot.cn/v1
-//   AGENT_LLM_MODEL     默认 glm-4.6
+//   AGENT_LLM_MODEL     默认 glm-5.3-flash（Flash 档，额度消耗最低；可用 AGENT_LLM_MODEL 覆盖）
 import type { RawProposal } from './types';
 import type { ContextBundle } from './context';
 import { PLAN_PROPOSAL_SCHEMA_HINT, renderPlanProposalPrompt } from './capabilities';
@@ -35,7 +35,7 @@ export type ChatCompletionsResult = { ok: true; content: string } | { ok: false;
 export async function chatCompletions(opts: { messages: ChatMessage[]; temperature?: number; model?: string; timeoutMs?: number }): Promise<ChatCompletionsResult> {
   const key = process.env.AGENT_LLM_API_KEY ?? '';
   const baseUrl = trimSlash(process.env.AGENT_LLM_BASE_URL ?? 'https://open.bigmodel.cn/api/paas/v4');
-  const model = opts.model ?? process.env.AGENT_LLM_MODEL ?? 'glm-4.6';
+  const model = opts.model ?? process.env.AGENT_LLM_MODEL ?? 'glm-5.3-flash';
   if (!key || !baseUrl) return { ok: false, error: 'NO_CREDENTIALS' };
   const body = { model, temperature: opts.temperature ?? 0, messages: opts.messages };
   try {
@@ -171,7 +171,7 @@ export class OpenAICompatibleAdapter implements ModelAdapter {
   id = 'openai-compatible';
   private key = process.env.AGENT_LLM_API_KEY ?? '';
   private baseUrl = trimSlash(process.env.AGENT_LLM_BASE_URL ?? 'https://open.bigmodel.cn/api/paas/v4');
-  private model = process.env.AGENT_LLM_MODEL ?? 'glm-4.6';
+  private model = process.env.AGENT_LLM_MODEL ?? 'glm-5.3-flash';
 
   available(): boolean {
     return Boolean(this.key) && Boolean(this.baseUrl);
