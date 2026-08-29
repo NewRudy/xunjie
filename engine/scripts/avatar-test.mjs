@@ -204,6 +204,67 @@ section('路由 POST /api/agent/avatar/interpret（Hono 冒烟）');
   ok(noText.status === 400 && (await noText.json()).error?.code === 'BAD_BODY', '空 text → 400 BAD_BODY');
 }
 
+// ---------- 风电场景（合同 §9，WIND-FARM-01；登记 ID 来自 farm.json/windFarm.ts） ----------
+section('风电场景 WIND-FARM-01（scene=wind）');
+{
+  const wkinds = (text) => parseAvatarCommand(text, 'wind').map((c) => c.kind);
+
+  const fly7 = parseAvatarCommand('飞到 7 号风机', 'wind');
+  ok(fly7.length === 1 && fly7[0].kind === 'navigate' && fly7[0].targetId === 'CP-WT-07' && fly7[0].movement === 'fly', '飞到 7 号风机 → navigate CP-WT-07 fly', JSON.stringify(fly7));
+
+  const run10 = parseAvatarCommand('跑到 10 号风机', 'wind');
+  ok(run10.length === 1 && run10[0].kind === 'navigate' && run10[0].targetId === 'CP-WT-10' && run10[0].movement === 'run', '跑到 10 号风机 → navigate CP-WT-10 run', JSON.stringify(run10));
+
+  const go2 = parseAvatarCommand('去 2 号风机', 'wind');
+  ok(go2.length === 1 && go2[0].targetId === 'CP-WT-02' && go2[0].movement === 'fly', '去 2 号风机（未说移动方式）→ 山地默认 fly（§9）', JSON.stringify(go2));
+
+  const repair = parseAvatarCommand('维修 7 号风机', 'wind');
+  ok(JSON.stringify(wkinds('维修 7 号风机')) === JSON.stringify(['navigate', 'focus_asset', 'repair_simulation']), '维修 7 号风机 → navigate + focus_asset + repair_simulation', JSON.stringify(repair));
+  ok(repair[0].targetId === 'CP-WT-07', '先导航到 CP-WT-07', JSON.stringify(repair[0]));
+  ok(repair[1].targetId === 'HS-WTG-07', 'focus_asset HS-WTG-07', JSON.stringify(repair[1]));
+  ok(repair[2].kind === 'repair_simulation' && repair[2].targetId === 'HS-WTG-07' && repair[2].checkpointId === 'CP-WT-07', 'repair_simulation HS-WTG-07 @ CP-WT-07（齿轮箱高速端轴承）', JSON.stringify(repair[2]));
+  const reply = interpretAvatarCommand('维修 7 号风机', 'wind').reply;
+  ok(reply.includes('7 号风机') && reply.includes('维修仿真') && reply.includes('SIMULATED'), '风电维修 reply 面向观众可读且标 SIMULATED', reply);
+
+  const focus5 = parseAvatarCommand('查看 5 号风机', 'wind');
+  ok(focus5.length === 1 && focus5[0].kind === 'focus_asset' && focus5[0].targetId === 'HS-WTG-05', '查看 5 号风机 → focus_asset HS-WTG-05（无移动动词不导航）', JSON.stringify(focus5));
+
+  const ops = parseAvatarCommand('回运维点', 'wind');
+  ok(ops.length === 1 && ops[0].kind === 'navigate' && ops[0].targetId === 'OPS-WIND-01', '风电 回运维点 → navigate OPS-WIND-01', JSON.stringify(ops));
+
+  for (const [text, why] of [
+    ['维修 3 号风机', '维修仅登记 7 号风机'],
+    ['飞到 12 号风机', '编号未登记（1~10）'],
+    ['维修一下风机', '维修编号缺失'],
+  ]) {
+    try {
+      parseAvatarCommand(text, 'wind');
+      ok(false, `「${text}」应抛澄清（${why}）`);
+    } catch (e) {
+      ok(e instanceof AvatarClarificationError && e.examples.includes('维修 7 号风机'), `「${text}」→ 澄清（${why}）+ 风电示例`, e.message);
+    }
+  }
+}
+
+// ---------- 风电路由冒烟：白名单第二场景 + 统一外壳 ----------
+section('路由 POST /api/agent/avatar/interpret（风电 WIND-FARM-01）');
+{
+  const okRes = await post({ text: '飞到 7 号风机', sceneId: 'WIND-FARM-01', sceneRevision: 'fixture-v1' });
+  const okBody = await okRes.json();
+  ok(okRes.status === 200 && okBody.status === 'available', '风电 200 available', JSON.stringify(okBody).slice(0, 200));
+  ok(okBody.truth === 'SIMULATED', '风电 truth=SIMULATED');
+  ok(okBody.data?.commands?.[0]?.targetId === 'CP-WT-07' && okBody.data.commands[0].movement === 'fly', 'data.commands → CP-WT-07 fly', JSON.stringify(okBody.data?.commands));
+  ok(Array.isArray(okBody.sourceRefs) && okBody.sourceRefs.includes('player-demo/example/public/wind/farm.json'), 'sourceRefs 含 farm.json 事实源', JSON.stringify(okBody.sourceRefs));
+
+  const badRev = await post({ text: '停下', sceneId: 'WIND-FARM-01', sceneRevision: 'fixture-v0' });
+  ok(badRev.status === 400 && (await badRev.json()).error?.code === 'CLARIFICATION_NEEDED', '风电 revision 不符 → 400 CLARIFICATION_NEEDED');
+
+  const clarifyRes = await post({ text: '维修 3 号风机', sceneId: 'WIND-FARM-01', sceneRevision: 'fixture-v1' });
+  const clarifyBody = await clarifyRes.json();
+  ok(clarifyRes.status === 400 && clarifyBody.error?.code === 'CLARIFICATION_NEEDED', '风电未登记维修目标 → 400');
+  ok(Array.isArray(clarifyBody.clarification?.examples) && clarifyBody.clarification.examples.includes('维修 7 号风机'), '风电澄清示例来自 WIND_AVATAR_EXAMPLES', JSON.stringify(clarifyBody.clarification?.examples));
+}
+
 // ---------- 汇总 ----------
 fs.rmSync(tmpDb, { force: true });
 console.log(`\n========================================`);

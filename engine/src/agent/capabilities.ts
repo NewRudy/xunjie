@@ -16,6 +16,14 @@ export const AVATAR_EVIDENCE_KINDS = ['photo', 'thermal', 'reading'] as const;
 /** 维修目标与安全落点检查点的唯一绑定：不在表内的组合一律拒绝（fixture 登记） */
 export const AVATAR_REPAIR_PAIRS = [{ targetId: 'STR-B2-07', checkpointId: 'CP-INV-B02' }] as const;
 
+// —— 风电场景 WIND-FARM-01（合同 §9）：登记 ID 派生自 farm.json（windFarm.ts），不手抄 ——
+
+import { WIND_FOCUS_TARGETS, WIND_NAV_TARGETS, WIND_REPAIR } from './windFarm';
+
+export const WIND_AVATAR_NAV_TARGETS = WIND_NAV_TARGETS;
+export const WIND_AVATAR_FOCUS_TARGETS = WIND_FOCUS_TARGETS;
+export const WIND_AVATAR_REPAIR_PAIRS = [{ targetId: WIND_REPAIR.targetId, checkpointId: WIND_REPAIR.checkpointId }] as const;
+
 // —— 人物命令能力登记项 ——
 
 export interface AvatarCommandCapability {
@@ -102,6 +110,65 @@ export function avatarCapability(kind: string): AvatarCommandCapability | undefi
   return AVATAR_COMMAND_CAPABILITIES.find((c) => c.kind === kind);
 }
 
+// —— 风电场景能力目录（合同 §9）：共享运动命令 + 风电导航/聚焦/维修；不含光伏任务闭环三命令 ——
+
+export const WIND_AVATAR_COMMAND_CAPABILITIES: readonly AvatarCommandCapability[] = [
+  {
+    kind: 'navigate',
+    label: '导航到登记检查点/运维点（风电场站）',
+    fields: ['kind', 'targetId', 'movement'],
+    domains: { targetId: WIND_AVATAR_NAV_TARGETS, movement: AVATAR_MOVEMENTS },
+    fieldErrorCodes: { targetId: 'TARGET', movement: 'MOVEMENT' },
+  },
+  {
+    kind: 'move_relative',
+    label: '相对移动（up/down 必须飞行）',
+    fields: ['kind', 'direction', 'distanceMeters', 'movement'],
+    domains: { direction: AVATAR_DIRECTIONS, movement: AVATAR_MOVEMENTS },
+    ranges: { distanceMeters: { min: DIST_MIN, max: DIST_MAX } },
+    fieldErrorCodes: { direction: 'DIRECTION', movement: 'MOVEMENT', distanceMeters: 'DISTANCE' },
+  },
+  {
+    kind: 'turn',
+    label: '原地转向',
+    fields: ['kind', 'degrees'],
+    ranges: { degrees: { min: DEG_MIN, max: DEG_MAX } },
+    fieldErrorCodes: { degrees: 'DEGREES' },
+  },
+  { kind: 'jump', label: '原地跳跃', fields: ['kind'], fieldErrorCodes: {} },
+  { kind: 'stop', label: '停止移动', fields: ['kind'], fieldErrorCodes: {} },
+  {
+    kind: 'focus_asset',
+    label: '聚焦登记机组',
+    fields: ['kind', 'targetId'],
+    domains: { targetId: WIND_AVATAR_FOCUS_TARGETS },
+    fieldErrorCodes: { targetId: 'TARGET' },
+  },
+  {
+    kind: 'repair_simulation',
+    label: '维修仿真（目标与检查点必须按登记成对出现）',
+    fields: ['kind', 'targetId', 'checkpointId'],
+    domains: {
+      targetId: WIND_AVATAR_REPAIR_PAIRS.map((p) => p.targetId),
+      checkpointId: WIND_AVATAR_REPAIR_PAIRS.map((p) => p.checkpointId),
+    },
+    fieldErrorCodes: { targetId: 'TARGET', checkpointId: 'TARGET' },
+  },
+];
+
+/** 场景化能力目录与维修绑定对：avatar.ts 的 AvatarScene 联合类型在这里取 catalog（避免循环依赖用字符串） */
+export function avatarCapabilitiesFor(scene: 'pecc' | 'wind'): readonly AvatarCommandCapability[] {
+  return scene === 'wind' ? WIND_AVATAR_COMMAND_CAPABILITIES : AVATAR_COMMAND_CAPABILITIES;
+}
+
+export function avatarCapabilityFor(scene: 'pecc' | 'wind', kind: string): AvatarCommandCapability | undefined {
+  return avatarCapabilitiesFor(scene).find((c) => c.kind === kind);
+}
+
+export function avatarRepairPairsFor(scene: 'pecc' | 'wind'): readonly { targetId: string; checkpointId: string }[] {
+  return scene === 'wind' ? WIND_AVATAR_REPAIR_PAIRS : AVATAR_REPAIR_PAIRS;
+}
+
 // —— 任务提案 step 能力（contracts/agent-state.md §3 的 kind 白名单登记） ——
 
 export interface PlanStepCapability {
@@ -155,6 +222,28 @@ export function renderAvatarSystemPrompt(): string {
     '4. 你只控制数字孪生中的虚拟运维员（SIMULATED 仿真），绝不输出任何真实设备操作。',
     '5. 语义映射参考：「维修 7 号异常组串」→ navigate CP-INV-B02 + focus_asset STR-B2-07 + repair_simulation；「检查 B2 屋顶异常」→ start_inspection；「我同意/我不同意」→ decide_pending approve/reject；「采集证据」→ capture_evidence。',
   ].join('\n');
+}
+
+/** 风电场景（WIND-FARM-01）人物指令解释器 system prompt：同一模板换风电能力目录与语义映射（合同 §9） */
+export function renderWindAvatarSystemPrompt(): string {
+  return [
+    '你是「巡界」数字运维员的指令解释器，当前场景为风电场站（老鸦岭，WIND-FARM-01），把一句中文口语映射为受控命令序列。只输出一个 JSON 对象，禁止输出任何解释、注释、markdown 或代码。',
+    '格式：{"reply":"<简短中文确认，一两句>","commands":[<命令>...]}',
+    '本场景登记对象：运维点 OPS-WIND-01；机组 HS-WTG-01..HS-WTG-10（1~10 号风机）；塔下检查点 CP-WT-01..CP-WT-10（与机组编号一一对应）。',
+    'commands 每个元素必须恰好是以下形状之一（字段名与取值完全一致，不得增加/缺少字段，不得携带 commandId，服务端统一编号）：',
+    ...WIND_AVATAR_COMMAND_CAPABILITIES.map(shapeLine),
+    '硬性约束：',
+    '1. targetId/checkpointId 只能取上表登记值——这是本场景全部登记对象；禁止发明其他 ID、世界坐标、脚本、Cesium API 或任何代码。',
+    `2. direction 为 up/down 时 movement 必须为 "fly"；distanceMeters 取 ${DIST_MIN}..${DIST_MAX}；degrees 取 ${DEG_MIN}..${DEG_MAX}。`,
+    '3. commands 按执行顺序排列，最多 6 条；无法把用户输入映射为上述命令时，输出 {"reply":"...","commands":[]}。',
+    '4. 你只控制数字孪生中的虚拟运维员（SIMULATED 仿真），绝不输出任何真实设备操作。',
+    `5. 语义映射参考：「飞到 N 号风机」→ navigate CP-WT-0N fly（N=1~10，不足两位补零）；「查看 N 号风机」→ focus_asset HS-WTG-0N；「维修 7 号风机」→ navigate CP-WT-07 + focus_asset HS-WTG-07 + repair_simulation（维修仅登记 7 号机 ${WIND_REPAIR.componentLabel}，其他编号输出空 commands 并在 reply 说明）；「回运维点」→ navigate OPS-WIND-01。`,
+  ].join('\n');
+}
+
+/** 场景化 prompt 选择 */
+export function renderAvatarSystemPromptFor(scene: 'pecc' | 'wind'): string {
+  return scene === 'wind' ? renderWindAvatarSystemPrompt() : renderAvatarSystemPrompt();
 }
 
 /** 任务提案 planner system prompt（由 step 能力登记渲染） */

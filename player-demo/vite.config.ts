@@ -61,6 +61,7 @@ export default defineConfig({
                 "3dtiles": path.resolve(__dirname, "example", "3dtiles", "index.html"),
                 "3dgs": path.resolve(__dirname, "example", "3dgs", "index.html"),
                 "gltf": path.resolve(__dirname, "example", "gltf", "index.html"),
+                "wind": path.resolve(__dirname, "example", "wind", "index.html"),
             },
         },
     },

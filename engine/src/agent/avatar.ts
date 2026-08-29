@@ -344,7 +344,9 @@ function parseWindNavigate(text: string): AvatarCommand[] | null {
   const no = extractTurbineNo(text);
   if (no !== null && WIND_RE.turbineWord.test(text) && WIND_RE.moveVerb.test(text)) {
     const t = windTurbineByNo(no);
-    if (!t) clarify(`未登记 ${no} 号风机：本场景登记 1~10 号风机（HS-WTG-01..10）`);
+    if (!t) {
+      throw new AvatarClarificationError(`未登记 ${no} 号风机：本场景登记 1~10 号风机（HS-WTG-01..10）`);
+    }
     hits.push(t.checkpointId);
   }
   if (RE.ops.test(text)) hits.push('OPS-WIND-01');
@@ -362,7 +364,9 @@ function parseWindFocus(text: string): AvatarCommand[] | null {
   const no = extractTurbineNo(text);
   if (no === null || !WIND_RE.turbineWord.test(text)) return null;
   const t = windTurbineByNo(no);
-  if (!t) clarify(`未登记 ${no} 号风机：本场景登记 1~10 号风机（HS-WTG-01..10）`);
+  if (!t) {
+    throw new AvatarClarificationError(`未登记 ${no} 号风机：本场景登记 1~10 号风机（HS-WTG-01..10）`);
+  }
   return withIds([{ kind: 'focus_asset', targetId: t.id as WindTurbineId }]);
 }
 

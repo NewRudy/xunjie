@@ -258,3 +258,14 @@
 - 设备维修必须从场站/设备继续深入到部件与测点，绑定 SOP 版本、授权、路线、步骤、前后证据和真实性标签；当前只宣称数字维修仿真与指导，不宣称完成物理维修。
 - 产品愿景覆盖水风光三类真实工程场景；贵客松仍采用“三个入口、一条光伏深链”，打透 `ANOM-DEMO-01 → STR-B2-07 → INV-B-02`，风电后续复用黔风智维场景，水电待可信工程资产后扩展。
 - 完整讨论稿见 `XUNJIE_PROJECT_CONTENT.md`，该文档作为后续场景替换、Agent 编排和设备精细作业设计的产品基线。
+
+### 2026-08-29 · 方向拍板：风电先行，player-demo 养成新主前端
+
+- 用户拍板：比赛今晚继续（截止 08-30 08:00）；水风光三张卡**先做风电工程场景**（只要工程场景前端，不做水电/光伏卡内部）；`player-demo/`（上游 cesium-player-controller 示例骨架，MIT，SHA fd88338 见 player-demo/UPSTREAM.md）**养成新的主前端**，后续替换为对应工程场景，由大模型控制人物移动、规划路线，到目标设备后做精细化可追溯维修。
+- 风电资产已就位：`player-demo/example/public/wind/assets/laoyeling-mountain/`（149MB 3D Tiles，CC-BY-4.0 Li Yanquan）与 `wind-turbine/`（14MB，CC-BY-4.0 Sket_h，动画 `rotation|Action`，scale 2.8），源自 `~/Documents/geo_agent/qianfeng-windops-platform/dist-pages/`。
+- **`player-demo/example/public/wind/farm.json` 是风电场景唯一事实源**（sceneId `WIND-FARM-01`/revision `fixture-v1`）：origin 106.6/26.5/1250m、山体碰撞矩阵、10 台 `HS-WTG-01..10`（07 为 critical）、运维点 `OPS-WIND-01`、维修对象 `HS-WTG-07` 齿轮箱高速端轴承 @ `CP-WT-07`（7 步 RS-1..RS-7）、credits 三条。
+- engine 侧已扩展风电场景：`src/agent/windFarm.ts` 新建（只读 farm.json 导出登记 ID/标签）；avatar.ts/capabilities.ts/avatar-llm.ts/routes.ts 全部穿 `scene='pecc'|'wind'` 参数，路由白名单接受两个 sceneId。合同 `contracts/avatar-command.md` 新增 §9 登记该场景。测试 avatar **86/86**（含风电 20 条新用例）、avatar-llm 92/92、agent 72/72 全绿；前后端 `tsc --noEmit` 通过。
+- 风电映射口径：山地导航**默认 fly**（与光伏默认 walk 不同）；「查看 N 号风机」只聚焦不导航；维修仅登记 7 号风机，其他编号澄清；风电不走任务闭环三意图。
+- 并发分工注意：另一 agent 同期重构了 engine 的 LLM 网关（capabilities.ts 能力目录、avatar-llm.ts 走 model.ts structured 网关）并新建 PPT_CONTENT.md/TEAM_PPT_BRIEF.md/XUNJIE_PROJECT_CONTENT.md——在其上叠加，不回退；改 engine 文件前先重新 Read。
+- 环境经验：本机代理会掐断 GitHub 大文件（~1MB），`curl --noproxy '*'` 直连 codeload 可达 730KB/s；npm 用 npmmirror 快。player-demo dev server 跑在 5210（5173 被旧 web 占用），页面 `http://localhost:5210/cesium-player-controller/`，风电页 `/wind/`。
+- 待办：player-demo 风电场景页（子代理进行中）→ 浏览器整链验收（无头软渲染跑不动 146MB 山体，需真实浏览器）→ farm.json 里 opsPoint 的 up=150 与风机 focus 高亮点是估算值，物理落地后需目检校准。

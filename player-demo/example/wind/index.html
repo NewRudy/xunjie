@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>风电工程场景 · 巡界 XUNJIE</title>
+    <style>
+        html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+
+        .panel {
+            background: rgba(10, 15, 22, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 10px;
+            color: #eaf2ff;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4);
+        }
+
+        /* ── 顶部 HUD ── */
+        #hud-panel {
+            position: fixed;
+            left: 12px;
+            top: 12px;
+            z-index: 9999;
+            width: 400px;
+            max-width: calc(100vw - 24px);
+            max-height: 72vh;
+            display: flex;
+            flex-direction: column;
+            padding: 12px 14px;
+            font-size: 13px;
+        }
+        .hud-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+        .hud-title { font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
+        .badge {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+        }
+        .badge-sim { color: #ffd479; border: 1px solid rgba(255, 212, 121, 0.65); background: rgba(255, 212, 121, 0.1); }
+        .badge-llm { color: #8be89b; border: 1px solid rgba(139, 232, 155, 0.6); background: rgba(139, 232, 155, 0.1); }
+        .badge-fallback { color: #ffb86b; border: 1px solid rgba(255, 184, 107, 0.6); background: rgba(255, 184, 107, 0.1); }
+        .badge-risk-critical { color: #ff7b7b; border: 1px solid rgba(255, 123, 123, 0.6); }
+        .badge-risk-warning { color: #ffd479; border: 1px solid rgba(255, 212, 121, 0.6); }
+        .badge-risk-normal { color: #8be89b; border: 1px solid rgba(139, 232, 155, 0.6); }
+        .hud-sub { color: #a9b8cc; font-size: 12px; line-height: 1.5; margin-bottom: 2px; }
+        .hud-warn { color: #ffb86b; }
+        .hud-hidden { display: none !important; }
+
+        #cmd-form { display: flex; gap: 6px; margin: 8px 0 8px; }
+        #cmd-input {
+            flex: 1;
+            min-width: 0;
+            padding: 7px 9px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            background: rgba(255, 255, 255, 0.08);
+            color: #f2f7ff;
+            font-size: 13px;
+            outline: none;
+        }
+        #cmd-input:focus { border-color: rgba(97, 218, 251, 0.7); }
+        #cmd-input::placeholder { color: #7d8da1; font-size: 12px; }
+        #cmd-send {
+            padding: 7px 14px;
+            border: none;
+            border-radius: 6px;
+            background: #1e88e5;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        #cmd-send:hover { background: #42a5f5; }
+
+        #cmd-log {
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .log-entry { border-top: 1px dashed rgba(255, 255, 255, 0.14); padding-top: 6px; }
+        .log-time { color: #7d8da1; margin-right: 6px; }
+        .log-text { color: #cfe3ff; }
+        .log-reply { color: #eaf2ff; margin-top: 2px; }
+        .log-cmds { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .cmd-chip {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: rgba(97, 218, 251, 0.12);
+            border: 1px solid rgba(97, 218, 251, 0.4);
+            color: #9be2f5;
+            font-size: 11px;
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+        }
+        .log-examples { color: #a9b8cc; margin-top: 2px; }
+        .log-warnings { color: #ffd479; margin-top: 2px; }
+
+        /* ── 右侧信息卡 / 记录卡 ── */
+        .side-card {
+            position: fixed;
+            right: 12px;
+            z-index: 9999;
+            width: 310px;
+            max-width: calc(100vw - 24px);
+            padding: 12px 14px;
+            font-size: 13px;
+        }
+        #asset-card { top: 12px; }
+        #repair-record { top: 12px; }
+        .side-card-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .close-btn {
+            border: none;
+            background: transparent;
+            color: #a9b8cc;
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0 2px;
+        }
+        .close-btn:hover { color: #fff; }
+        .side-card-body { color: #cfe3ff; font-size: 12px; line-height: 1.7; }
+        .side-card-body .k { color: #7d8da1; display: inline-block; min-width: 76px; }
+        .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+        /* ── 维修进度面板 ── */
+        #repair-panel {
+            position: fixed;
+            left: 12px;
+            bottom: 12px;
+            z-index: 9999;
+            width: 420px;
+            max-width: calc(100vw - 24px);
+            padding: 12px 14px;
+            font-size: 13px;
+        }
+        .progress {
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.12);
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        #repair-bar { height: 100%; width: 0; background: linear-gradient(90deg, #1e88e5, #61dafb); transition: width 0.25s ease; }
+        #repair-steps { margin: 0; padding-left: 20px; color: #a9b8cc; font-size: 12px; line-height: 1.8; }
+        #repair-steps li.done { color: #8be89b; }
+        #repair-steps li.active { color: #ffd479; font-weight: 700; }
+        #repair-steps .step-time { color: #7d8da1; font-family: ui-monospace, Menlo, Consolas, monospace; margin-left: 6px; }
+
+        /* ── 页脚 credits ── */
+        #credits-footer {
+            position: fixed;
+            left: 50%;
+            bottom: 10px;
+            transform: translateX(-50%);
+            z-index: 9998;
+            padding: 6px 14px;
+            border-radius: 8px;
+            background: rgba(10, 15, 22, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            color: #9fb2c8;
+            font-size: 11px;
+            line-height: 1.6;
+            text-align: center;
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .back-link {
+            position: fixed;
+            left: 12px;
+            bottom: 12px;
+            z-index: 9999;
+            color: #cfe3ff;
+            background: rgba(10, 15, 22, 0.6);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            text-decoration: none;
+            backdrop-filter: blur(4px);
+        }
+        .back-link:hover { color: #fff; }
+        /* 维修进度面板与返回链接同侧，避免重叠 */
+        #repair-panel:not([hidden]) ~ .back-link { bottom: 190px; }
+
+        @media (max-width: 900px) {
+            #credits-footer { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+
+    <div id="hud-panel" class="panel">
+        <div class="hud-header">
+            <span class="hud-title">巡界 XUNJIE · 风电工程场景（老鸦岭）</span>
+            <span class="badge badge-sim">SIMULATED 演示仿真</span>
+        </div>
+        <div id="collider-status" class="hud-sub">碰撞：初始化中…</div>
+        <div id="engine-status" class="hud-sub hud-warn hud-hidden">引擎未连接（localhost:8787），仅可手动控制</div>
+        <div id="exec-status" class="hud-sub">执行器：待命（WASD 移动 / Shift 冲刺 / Space 跳跃 / F 飞行 / V 视角）</div>
+        <form id="cmd-form" autocomplete="off">
+            <input id="cmd-input" type="text"
+                placeholder="试试：飞到 7 号风机 / 维修 7 号风机 / 跑到 2 号风机 / 回运维点 / 停下" />
+            <button id="cmd-send" type="submit">发送</button>
+        </form>
+        <div id="cmd-log"></div>
+    </div>
+
+    <div id="asset-card" class="panel side-card" hidden>
+        <div class="side-card-head">
+            <span id="asset-title">风机信息</span>
+            <button id="asset-close" class="close-btn" title="关闭并恢复跟随视角">×</button>
+        </div>
+        <div id="asset-body" class="side-card-body"></div>
+    </div>
+
+    <div id="repair-record" class="panel side-card" hidden>
+        <div class="side-card-head">
+            <span>维修记录卡（可追溯回执）</span>
+            <button id="record-close" class="close-btn" title="关闭">×</button>
+        </div>
+        <div id="record-body" class="side-card-body"></div>
+    </div>
+
+    <div id="repair-panel" class="panel" hidden>
+        <div class="side-card-head">
+            <span id="repair-title">维修仿真进度</span>
+            <span id="repair-progress-text" class="mono"></span>
+        </div>
+        <div class="progress"><div id="repair-bar"></div></div>
+        <ol id="repair-steps"></ol>
+    </div>
+
+    <div id="credits-footer"></div>
+
+    <a class="back-link" href="../">← 返回首页</a>
+
+    <script type="module" src="./index.ts"></script>
+</body>
+</html>

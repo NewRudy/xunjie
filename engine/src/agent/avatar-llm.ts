@@ -4,12 +4,13 @@
 // 模型输出只是"原始意图"：必须通过确定性白名单校验（kind/字段集合/登记 ID/数值域）才生效；
 // HTTP/超时/JSON/校验任一失败 → 整条丢弃，回退 avatar.ts 确定性中文解析，planner 如实标注（reason 只给错误类型）。
 import { AvatarClarificationError, buildReply, interpretAvatarCommand, normalizeAvatarText, withIds } from './avatar';
-import type { AvatarCommand, AvatarCommandInput } from './avatar';
-import { AVATAR_REPAIR_PAIRS, avatarCapability, renderAvatarSystemPrompt } from './capabilities';
+import type { AvatarCommand, AvatarCommandInput, AvatarScene } from './avatar';
+import { avatarCapabilityFor, avatarRepairPairsFor, renderAvatarSystemPromptFor } from './capabilities';
 import { structured } from './model';
 import type { PlannerInfo } from './types';
 
-const AVATAR_SYSTEM_PROMPT = renderAvatarSystemPrompt();
+const AVATAR_SYSTEM_PROMPT_PECC = renderAvatarSystemPromptFor('pecc');
+const AVATAR_SYSTEM_PROMPT_WIND = renderAvatarSystemPromptFor('wind');
 
 export const AVATAR_LLM_MAX_COMMANDS = 6;
 const REPLY_MAX_CHARS = 200;
@@ -27,11 +28,11 @@ function exactFields(obj: Record<string, unknown>, fields: readonly string[]): b
 type CommandCheck = { ok: true; command: AvatarCommandInput } | { ok: false; code: string };
 
 /** 按能力目录逐字段校验 + 跨字段确定性规则；字段集合/取值域/数值域全部来自登记，不在校验处硬编码 */
-function validateCommand(raw: unknown): CommandCheck {
+function validateCommand(raw: unknown, scene: AvatarScene): CommandCheck {
   if (!isPlainObject(raw)) return { ok: false, code: 'SHAPE' };
   const { kind } = raw;
   if (!isStr(kind)) return { ok: false, code: 'KIND' };
-  const cap = avatarCapability(kind);
+  const cap = avatarCapabilityFor(scene, kind);
   if (!cap) return { ok: false, code: 'KIND' };
   if (!exactFields(raw, cap.fields)) return { ok: false, code: 'FIELDS' };
 
@@ -57,7 +58,7 @@ function validateCommand(raw: unknown): CommandCheck {
     return { ok: false, code: 'MOVEMENT_FLY' };
   }
   if (kind === 'repair_simulation') {
-    const pair = AVATAR_REPAIR_PAIRS.find((p) => p.targetId === raw.targetId);
+    const pair = avatarRepairPairsFor(scene).find((p) => p.targetId === raw.targetId);
     if (!pair || raw.checkpointId !== pair.checkpointId) return { ok: false, code: 'TARGET' };
   }
 
@@ -68,7 +69,7 @@ function validateCommand(raw: unknown): CommandCheck {
 export type LlmAvatarValidation = { ok: true; commands: AvatarCommandInput[]; reply: string | null } | { ok: false; code: string };
 
 /** 顶层校验：形状/reply/数量上限 + 逐条白名单；失败只给错误类型 code（不回传模型原文） */
-export function validateLlmAvatarOutput(raw: unknown): LlmAvatarValidation {
+export function validateLlmAvatarOutput(raw: unknown, scene: AvatarScene = 'pecc'): LlmAvatarValidation {
   if (!isPlainObject(raw)) return { ok: false, code: 'SHAPE' };
   const { commands, reply } = raw;
   if (!Array.isArray(commands) || commands.length === 0) return { ok: false, code: 'COMMANDS' };
@@ -81,7 +82,7 @@ export function validateLlmAvatarOutput(raw: unknown): LlmAvatarValidation {
   }
   const out: AvatarCommandInput[] = [];
   for (const c of commands) {
-    const checked = validateCommand(c);
+    const checked = validateCommand(c, scene);
     if (!checked.ok) return checked;
     out.push(checked.command);
   }
@@ -92,15 +93,15 @@ export function validateLlmAvatarOutput(raw: unknown): LlmAvatarValidation {
 
 type LlmAttempt = { ok: true; commands: AvatarCommand[]; reply: string } | { ok: false; error: string };
 
-async function interpretViaLlm(rawText: string): Promise<LlmAttempt> {
+async function interpretViaLlm(rawText: string, scene: AvatarScene): Promise<LlmAttempt> {
   const res = await structured<Record<string, unknown>>({
     messages: [
-      { role: 'system', content: AVATAR_SYSTEM_PROMPT },
+      { role: 'system', content: scene === 'wind' ? AVATAR_SYSTEM_PROMPT_WIND : AVATAR_SYSTEM_PROMPT_PECC },
       { role: 'user', content: JSON.stringify({ text: normalizeAvatarText(rawText) }) },
     ],
     parse: (v) => (isPlainObject(v) ? v : null),
     validator: (v) => {
-      const checked = validateLlmAvatarOutput(v);
+      const checked = validateLlmAvatarOutput(v, scene);
       // 校验失败码统一带前缀，与传输层错误类型（LLM_HTTP_x/LLM_TIMEOUT 等不包前缀）区分
       return checked.ok ? null : `LLM_VALIDATION_FAILED:${checked.code}`;
     },
@@ -108,7 +109,7 @@ async function interpretViaLlm(rawText: string): Promise<LlmAttempt> {
     maxAttempts: 1,
   });
   if (!res.ok) return { ok: false, error: res.error };
-  const validated = validateLlmAvatarOutput(res.value);
+  const validated = validateLlmAvatarOutput(res.value, scene);
   if (!validated.ok) return { ok: false, error: `LLM_VALIDATION_FAILED:${validated.code}` };
   const commands = withIds(validated.commands);
   return { ok: true, commands, reply: validated.reply ?? buildReply(commands) };
@@ -125,13 +126,13 @@ export interface AvatarOutcome {
 
 const DETERMINISTIC_PLANNER: PlannerInfo = { mode: 'deterministic-fallback', modelAvailable: false, reason: 'NO_CREDENTIALS' };
 
-export async function interpretAvatar(rawText: string): Promise<AvatarOutcome> {
+export async function interpretAvatar(rawText: string, scene: AvatarScene = 'pecc'): Promise<AvatarOutcome> {
   const normalizedText = normalizeAvatarText(rawText);
 
   // 无凭据：完全保持既有确定性行为，绝不外呼
   if (!process.env.AGENT_LLM_API_KEY) {
     try {
-      const { reply, commands } = interpretAvatarCommand(rawText);
+      const { reply, commands } = interpretAvatarCommand(rawText, scene);
       return { normalizedText, reply, commands, planner: DETERMINISTIC_PLANNER };
     } catch (e) {
       if (e instanceof AvatarClarificationError) throw e.withPlanner(DETERMINISTIC_PLANNER);
@@ -139,7 +140,7 @@ export async function interpretAvatar(rawText: string): Promise<AvatarOutcome> {
     }
   }
 
-  const llm = await interpretViaLlm(rawText);
+  const llm = await interpretViaLlm(rawText, scene);
   if (llm.ok) {
     return { normalizedText, reply: llm.reply, commands: llm.commands, planner: { mode: 'llm', modelAvailable: true } };
   }
@@ -147,7 +148,7 @@ export async function interpretAvatar(rawText: string): Promise<AvatarOutcome> {
   // 模型失败（HTTP/超时/JSON/校验）：整条丢弃 → 确定性回退，reason 只给错误类型
   const planner: PlannerInfo = { mode: 'deterministic-fallback', modelAvailable: true, reason: llm.error };
   try {
-    const { reply, commands } = interpretAvatarCommand(rawText);
+    const { reply, commands } = interpretAvatarCommand(rawText, scene);
     return { normalizedText, reply, commands, planner };
   } catch (e) {
     if (e instanceof AvatarClarificationError) throw e.withPlanner(planner);

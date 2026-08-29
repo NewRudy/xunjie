@@ -226,6 +226,30 @@ section('路由 POST /avatar/interpret（LLM 与回退的 planner 上浮）');
   ok(Array.isArray(clrBody.clarification?.examples) && clrBody.clarification.examples.length > 0, '澄清示例保留', JSON.stringify(clrBody.clarification?.examples?.length));
 }
 
+// ---------- 8. 风电场景：白名单按场景分流（WIND-FARM-01，合同 §9） ----------
+section('风电场景 LLM 校验（scene=wind）');
+{
+  calls.length = 0;
+  mockBehavior = { content: mockContent([{ kind: 'navigate', targetId: 'CP-WT-07', movement: 'fly' }], '收到，飞往 7 号风机。') };
+  const out = await interpretAvatar('带我去 7 号风机', 'wind');
+  ok(out.planner.mode === 'llm' && out.commands.length === 1 && out.commands[0].targetId === 'CP-WT-07' && out.commands[0].movement === 'fly', '风电登记 ID 过校验生效', JSON.stringify(out.commands));
+  const windPrompt = JSON.parse(lastCall()?.init?.body ?? '{}')?.messages?.[0]?.content ?? '';
+  ok(windPrompt.includes('CP-WT-07') && windPrompt.includes('HS-WTG-07'), '风电 system prompt 含风电登记 ID（能力目录按场景渲染）');
+
+  calls.length = 0;
+  mockBehavior = { content: mockContent([{ kind: 'navigate', targetId: 'CP-INV-B02', movement: 'walk' }]) };
+  const cross = await interpretAvatar('飞到 7 号风机', 'wind');
+  ok(cross.planner.mode === 'deterministic-fallback' && String(cross.planner.reason).startsWith('LLM_VALIDATION_FAILED:'), '光伏 ID 混入风电场景 → 整条拒绝回退', JSON.stringify(cross.planner));
+  ok(cross.commands.length === 1 && cross.commands[0].targetId === 'CP-WT-07' && cross.commands[0].movement === 'fly', '回退命令来自风电确定性解析（CP-WT-07 fly）', JSON.stringify(cross.commands));
+
+  calls.length = 0;
+  mockBehavior = { content: mockContent([{ kind: 'repair_simulation', targetId: 'HS-WTG-07', checkpointId: 'CP-WT-07' }], '收到，执行齿轮箱高速端轴承维修仿真。') };
+  const routeRes = await post({ text: '维修 7 号风机', sceneId: 'WIND-FARM-01', sceneRevision: 'fixture-v1' });
+  const routeBody = await routeRes.json();
+  ok(routeRes.status === 200 && routeBody.planner?.mode === 'llm' && routeBody.data?.commands?.[0]?.targetId === 'HS-WTG-07', '风电路由 LLM 合法输出 → 200 + planner.llm', JSON.stringify(routeBody.planner));
+  ok(routeBody.truth === 'SIMULATED' && routeBody.warnings?.some((w) => w.includes('仅数字现场仿真')), '风电 LLM 路径 truth=SIMULATED + 仿真告警不缺失');
+}
+
 // ---------- 汇总 ----------
 globalThis.fetch = realFetch;
 for (const k of ['AGENT_LLM_API_KEY', 'AGENT_LLM_BASE_URL', 'AGENT_LLM_MODEL']) delete process.env[k];

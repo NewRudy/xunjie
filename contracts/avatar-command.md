@@ -135,3 +135,33 @@ type AvatarCommand =
 3. 到达屋面后说“采集证据”，提交 fixture 约定的 photo/thermal/reading 仿真证据。
 4. 再说“我同意”，使用新的闭环审批绑定完成任务；最终状态为 `resolved`。
 5. 任一步骤缺少任务、检查点或待审批项时，界面给出明确原因，不猜、不静默跳过。
+
+## 9. 风电工程场景（WIND-FARM-01，2026-08-29 新增）
+
+同一接口 `POST /api/agent/avatar/interpret` 按 `sceneId` 分流：`WIND-FARM-01` / `fixture-v1` 进入风电场景解析。受控命令集合与 §3 相同，仅登记目标不同。
+
+### 9.1 单一事实源
+
+`player-demo/example/public/wind/farm.json` 是风电场景的唯一事实源（场景包与语义同源）：engine 的 `src/agent/windFarm.ts` 只读它导出登记 ID 与标签，前端场景页读同一份文件摆放资产与解算坐标。坐标、偏移、风险等级改动只改 farm.json，两端不同步复制。
+
+### 9.2 登记对象
+
+- 运维点：`OPS-WIND-01`（navigate 目标）。
+- 机组：`HS-WTG-01..10`（focus_asset 目标），每台对应塔下检查点 `CP-WT-01..10`（navigate 目标）。
+- 维修对象：仅 `HS-WTG-07` 齿轮箱高速端轴承（`GB-HS-BEARING`）@ `CP-WT-07`，维修步骤 RS-1..RS-7 见 farm.json `repairTargets[0].steps`。
+- 其他编号一律澄清，不猜。
+
+### 9.3 v1 中文映射（风电）
+
+- “飞到/去 N 号风机”（N=1..10）→ `navigate CP-WT-0N`；山地尺度大，未明说移动方式时默认 `fly`（与光伏默认 walk 不同）。
+- “跑到 N 号风机” → `navigate CP-WT-0N run`。
+- “查看/聚焦 N 号风机”（不含移动动词）→ `focus_asset HS-WTG-0N`，不触发导航。
+- “回运维点” → `navigate OPS-WIND-01`（默认 fly）。
+- “维修 7 号风机” → `navigate CP-WT-07` + `focus_asset HS-WTG-07` + `repair_simulation HS-WTG-07@CP-WT-07`。
+- 通用动作（move_relative/turn/jump/stop）与 §3 一致。
+
+### 9.4 边界
+
+- `repair_simulation` 仅登记 `HS-WTG-07@CP-WT-07`；“维修 3 号风机”等 → 400 CLARIFICATION_NEEDED，示例给出风电可说集。
+- 风电场景不支持任务闭环三意图（start_inspection/decide_pending/capture_evidence 仍属 PECC-PARK-01）；风电侧维修留痕由前端按 farm.json 步骤仿真，truth=SIMULATED。
+- 资产许可：山体 CC-BY-4.0（Li Yanquan）、风机 CC-BY-4.0（Sket_h），署名见 farm.json `credits`，前端场景页须可见。

@@ -7,6 +7,7 @@ import { createMission, handleSceneEvent, RuntimeHttpError, submitApproval, getM
 import { SCENE_ID, SCENE_REVISION } from './context';
 import { AVATAR_WARNINGS, AvatarClarificationError } from './avatar';
 import { interpretAvatar } from './avatar-llm';
+import { WIND_SCENE_ID, WIND_SCENE_REVISION } from './windFarm';
 import type { SceneEventInput } from './types';
 
 export const agentRoutes = new Hono();
@@ -43,29 +44,36 @@ agentRoutes.post('/missions', async (c) => {
   }
 });
 
-// —— POST /api/agent/avatar/interpret：自然语言 → 受控数字人动作（contracts/avatar-command.md §0/§2） ——
+// —— POST /api/agent/avatar/interpret：自然语言 → 受控数字人动作（contracts/avatar-command.md §0/§2/§9） ——
 // LLM-first：配置 AGENT_LLM_API_KEY 时真实调用 OpenAI-compatible 模型，模型 JSON 过确定性白名单校验后返回；
 // 未配置/失败 → 确定性中文解析回退。只读演示控制面，不改 MissionState 与任务闭环。
+// 场景白名单：PECC-PARK-01（光伏）与 WIND-FARM-01（风电，登记见 windFarm.ts/farm.json）。
+const AVATAR_SCENES: Record<string, { sceneRevision: string; scene: 'pecc' | 'wind'; sourceRef: string }> = {
+  [SCENE_ID]: { sceneRevision: SCENE_REVISION, scene: 'pecc', sourceRef: 'data/fixtures/park-pecc-01.json' },
+  [WIND_SCENE_ID]: { sceneRevision: WIND_SCENE_REVISION, scene: 'wind', sourceRef: 'player-demo/example/public/wind/farm.json' },
+};
+
 agentRoutes.post('/avatar/interpret', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body.text !== 'string' || !body.text.trim() || typeof body.sceneId !== 'string' || typeof body.sceneRevision !== 'string') {
     return err(c, 400, 'BAD_BODY', '入参须为 { text, sceneId, sceneRevision }');
   }
-  if (body.sceneId !== SCENE_ID || body.sceneRevision !== SCENE_REVISION) {
+  const sceneEntry = AVATAR_SCENES[body.sceneId];
+  if (!sceneEntry || body.sceneRevision !== sceneEntry.sceneRevision) {
     return err(
       c,
       400,
       'CLARIFICATION_NEEDED',
-      `场景须为 ${SCENE_ID}/${SCENE_REVISION}，收到: ${body.sceneId}/${body.sceneRevision}`,
-      { clarification: { field: body.sceneId !== SCENE_ID ? 'sceneId' : 'sceneRevision', options: [{ sceneId: SCENE_ID, sceneRevision: SCENE_REVISION }] } },
+      `场景须为 ${Object.entries(AVATAR_SCENES).map(([id, s]) => `${id}/${s.sceneRevision}`).join(' 或 ')}，收到: ${body.sceneId}/${body.sceneRevision}`,
+      { clarification: { field: !sceneEntry ? 'sceneId' : 'sceneRevision', options: Object.entries(AVATAR_SCENES).map(([sceneId, s]) => ({ sceneId, sceneRevision: s.sceneRevision })) } },
     );
   }
   try {
-    const { normalizedText, reply, commands, planner } = await interpretAvatar(body.text);
+    const { normalizedText, reply, commands, planner } = await interpretAvatar(body.text, sceneEntry.scene);
     return c.json({
       status: 'available' as const,
       data: { normalizedText, reply, commands },
-      sourceRefs: ['contracts/avatar-command.md', 'data/fixtures/park-pecc-01.json'],
+      sourceRefs: ['contracts/avatar-command.md', sceneEntry.sourceRef],
       truth: 'SIMULATED' as const,
       observedAt: nowIsoShanghai(),
       warnings: [...AVATAR_WARNINGS],

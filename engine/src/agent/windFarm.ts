@@ -17,7 +17,8 @@ export interface WindFarmFixture {
   repairTargets: { targetId: string; checkpointId: string; componentId: string; componentLabel: string }[];
 }
 
-const farmPath = fileURLToPath(new URL('../../player-demo/example/public/wind/farm.json', import.meta.url));
+// 相对 engine/src/agent/ 退三级到仓库根（tsx/构建产物同级布局下均可用；运行 cwd 无关）
+const farmPath = fileURLToPath(new URL('../../../player-demo/example/public/wind/farm.json', import.meta.url));
 export const windFarm: WindFarmFixture = JSON.parse(fs.readFileSync(farmPath, 'utf8'));
 
 if (windFarm.sceneId !== WIND_SCENE_ID || windFarm.sceneRevision !== WIND_SCENE_REVISION) {
