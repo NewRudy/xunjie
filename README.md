@@ -2,6 +2,8 @@
 
 贵客松赛道二「传统行业 AI 解决方案」之 AI × 能源（新能源场站运维）可运行 Demo。
 
+**线上演示**：https://rudy.cc.cd/xunjie/ （访问口令随参赛材料提供；当前上线风电场景，水/光陆续接入）
+
 运维人员用一句中文（文字或语音）下达任务，巡界汇集异常、设备、空间、环境和规程上下文，给出可追溯的检查建议；经用户授权，数字运维员在 Cesium 三维现场完成移动、定位、取证和维修推演，最后生成闭环回执。大模型负责理解与组织语言，路线、状态、审批与全部数字由确定性程序把关。
 
 ## 双场景与主链
@@ -36,7 +38,7 @@ npm run dev
 
 演示数据自动复位；需要手动复位时：`curl -X POST http://localhost:8787/api/debug/reset`。
 
-> 旧版 Vue 演示面板（`web/`）保留为光伏闭环的可视化参考，不再是主前端，后续由 player-demo 光伏页替代。
+> 主前端为 player-demo 多页沉浸式站点；旧版 Vue 演示面板（web/）已于 2026-08-30 移除，光伏闭环由 dispatch API 与测试保障、沉浸式光伏页在建。
 
 ## AI 与确定性程序的边界
 
@@ -108,7 +110,7 @@ npx tsc -p example/tsconfig.json --noEmit
 - 人物移动、取证和维修均为数字现场仿真，不代表机器人或真实设备已执行物理操作。
 - 真实 PoC 的第一步是接入一个场站的一类高频告警、匿名 SCADA/告警导出、资产映射、现行 SOP 和历史工单，再用研判耗时、无效派工率、证据完整率、响应/修复时间和闭环率验证价值。
 
-模型与资产署名：风机/山体模型与人物模型许可见 `player-demo/example/public/wind/farm.json` 的 credits 与各场景页页脚。
+模型与资产署名：见 [`player-demo/example/public/vendor/NOTICE.md`](player-demo/example/public/vendor/NOTICE.md) 与各场景包 credits（farm.json / dam.json / solar.json）。
 
 ## 关键文档
 
