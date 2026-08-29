@@ -46,9 +46,27 @@ interface AvatarCommand {
     degrees?: number;
     checkpointId?: string;
 }
+interface DispatchOutcome {
+    kind: string;
+    status: "available" | "rejected";
+    code?: string;
+    message?: string;
+    detail?: Record<string, unknown>;
+}
+interface MissionBrief {
+    missionId?: string;
+    phase?: string;
+    receipt?: { kind?: string } | null;
+}
 interface InterpretResponse {
     status?: string;
-    data?: { normalizedText?: string; reply?: string; commands?: AvatarCommand[] };
+    data?: {
+        normalizedText?: string;
+        reply?: string;
+        commands?: AvatarCommand[];
+        dispatch?: DispatchOutcome[];
+        mission?: MissionBrief | null;
+    };
     planner?: { mode?: "llm" | "deterministic-fallback"; modelAvailable?: boolean; reason?: string };
     truth?: string;
     warnings?: string[];
@@ -57,7 +75,13 @@ interface InterpretResponse {
 // ==================== 常量与 DOM ====================
 
 const BASE = import.meta.env.BASE_URL;
-const ENGINE_URL = "http://localhost:8787/api/agent/avatar/interpret";
+// dispatch：解释与闭环执行同端点（服务端编排收权）；风电场景闭环命令由后端显式拒绝，页面如实展示
+const ENGINE_URL = "http://localhost:8787/api/agent/avatar/dispatch";
+const DISPATCH_LABEL: Record<string, string> = {
+    start_inspection: "创建巡检任务",
+    decide_pending: "审批",
+    capture_evidence: "采集证据",
+};
 const SPEED: Record<AvatarMovement, number> = { walk: 5, run: 18, fly: 30 }; // m/s（脚本插值速度）
 const RISK_COLOR = { normal: Color.LIME, warning: Color.YELLOW, critical: Color.RED } as const;
 const RISK_LABEL = { normal: "正常", warning: "预警", critical: "严重" } as const;
@@ -135,10 +159,9 @@ async function main() {
     const absHeight = (up: number) => origin.heightM + up; // ENU up ≈ 椭球高（±0.01 弧度范围内）
 
     // 2. 山体 3D Tiles
-    // [临时调试] 无头截图验证时先注释掉山体（146MB 纹理在 swiftshader 下超时）
-    // const tileset = await Cesium3DTileset.fromUrl(`${BASE}${farm.assets.mountain.tilesetUrl}`);
-    // tileset.maximumScreenSpaceError = 8;
-    // viewer.scene.primitives.add(tileset);
+    const tileset = await Cesium3DTileset.fromUrl(`${BASE}${farm.assets.mountain.tilesetUrl}`);
+    tileset.maximumScreenSpaceError = 8;
+    viewer.scene.primitives.add(tileset);
 
     // 初始俯瞰视角（人物初始化后由第三人称相机接管）
     viewer.camera.setView({
@@ -149,6 +172,13 @@ async function main() {
     // 3. 风机 ×10（模型 + 风险等级标记）
     const modelToTurbine = new Map<Model, FarmTurbine>();
     const markerToTurbine = new Map<Entity, FarmTurbine>();
+    // fromGltfAsync  resolve 时 model.ready 可能仍为 false（动画尚未注册），需等 readyEvent
+    const whenModelReady = (model: Model): Promise<void> => {
+        if (model.ready) return Promise.resolve();
+        return new Promise((resolve) => {
+            const remove = model.readyEvent.addEventListener(() => { remove(); resolve(); });
+        });
+    };
     for (const t of farm.turbines) {
         const pos = localToWorld(t.offset.east, t.offset.north, t.offset.up);
         const modelMatrix = Transforms.headingPitchRollToFixedFrame(
@@ -157,21 +187,26 @@ async function main() {
             url: `${BASE}${farm.assets.turbine.gltfUrl}`,
             modelMatrix,
             scale: farm.assets.turbine.scale,
-        }).then((model) => {
+        }).then(async (model) => {
             viewer.scene.primitives.add(model);
             modelToTurbine.set(model, t);
+            await whenModelReady(model);
             // 播放桨叶转动动画；按名字找不到时退回 index 0
-            let ok = false;
+            const errText = (e: unknown) => (e instanceof Error ? `${e.name}: ${e.message}` : JSON.stringify(e));
             try {
-                ok = !!model.activeAnimations.add({
+                model.activeAnimations.add({
                     name: farm.assets.turbine.rotorAnimation,
                     loop: ModelAnimationLoop.REPEAT,
                 });
-            } catch { ok = false; }
-            if (!ok) {
+            } catch (e1) {
                 try {
                     model.activeAnimations.add({ index: 0, loop: ModelAnimationLoop.REPEAT });
-                } catch (e2) { console.warn(`风机 ${t.id} 桨叶动画播放失败:`, e2); }
+                } catch (e2) {
+                    console.warn(
+                        `风机 ${t.id} 桨叶动画播放失败（动画数=${model.activeAnimations.length}）:`,
+                        `按名[${farm.assets.turbine.rotorAnimation}]→${errText(e1)}; 按index0→${errText(e2)}`,
+                    );
+                }
             }
         }).catch((e) => console.warn(`风机模型加载失败 ${t.id}:`, e));
 
@@ -339,14 +374,19 @@ async function main() {
         if (bearingMarker) { viewer.entities.remove(bearingMarker); bearingMarker = null; }
     }
 
+    // 脉冲半径：每帧只算一次（两个 CallbackProperty 各自取 Date.now() 会有毫秒差，
+    // 偶发 semiMajor < semiMinor 直接抛 DeveloperError 停掉渲染，E2E 实测踩到过）
+    let ringRadius = 14;
+    let bearingRadius = 6;
+
     function addFocusRing(t: FarmTurbine) {
         clearFocusRing();
         const baseColor = RISK_COLOR[t.riskLevel];
         focusRing = viewer.entities.add({
             position: localToWorld(t.offset.east, t.offset.north, t.offset.up),
             ellipse: {
-                semiMajorAxis: new CallbackProperty(() => 14 + 5 * (0.5 + 0.5 * Math.sin(Date.now() / 280)), false),
-                semiMinorAxis: new CallbackProperty(() => 14 + 5 * (0.5 + 0.5 * Math.sin(Date.now() / 280)), false),
+                semiMajorAxis: new CallbackProperty(() => ringRadius, false),
+                semiMinorAxis: new CallbackProperty(() => ringRadius, false),
                 height: absHeight(t.offset.up + 2),
                 material: baseColor.withAlpha(0.35),
                 outline: true,
@@ -361,10 +401,7 @@ async function main() {
         bearingMarker = viewer.entities.add({
             position: localToWorld(t.offset.east, t.offset.north, t.offset.up + 125),
             ellipsoid: {
-                radii: new CallbackProperty(() => {
-                    const r = 6 + 3 * (0.5 + 0.5 * Math.sin(Date.now() / 240));
-                    return new Cartesian3(r, r, r);
-                }, false),
+                radii: new CallbackProperty(() => new Cartesian3(bearingRadius, bearingRadius, bearingRadius), false),
                 material: Color.RED.withAlpha(0.6),
                 outline: true,
                 outlineColor: Color.WHITE,
@@ -922,6 +959,18 @@ async function main() {
             commands,
             warnings: body.warnings,
         });
+        const outcomes = body.data?.dispatch ?? [];
+        const mission = body.data?.mission;
+        if (outcomes.length || mission?.missionId) {
+            const parts = outcomes.map((o) => {
+                const label = DISPATCH_LABEL[o.kind] ?? o.kind;
+                return o.status === "available" ? `${label}：已执行` : `${label}：未执行（${o.message ?? o.code ?? "失败"}）`;
+            });
+            if (mission?.missionId) {
+                parts.push(`任务 ${mission.missionId} · 阶段 ${mission.phase ?? "未知"}${mission.receipt?.kind === "mission_closed" ? " · 已闭环" : ""}`);
+            }
+            appendCommandLog({ time, text: "服务端编排", reply: parts.join("；") });
+        }
         if (commands.length) executor.push(commands);
     }
 
@@ -963,6 +1012,9 @@ async function main() {
         const now = performance.now();
         const dt = Math.min(0.05, Math.max(0.001, (now - lastTick) / 1000));
         lastTick = now;
+        // 脉冲高亮动画（每帧单点计算，供两个 CallbackProperty 读取）
+        ringRadius = 14 + 5 * (0.5 + 0.5 * Math.sin(now / 280));
+        bearingRadius = 6 + 3 * (0.5 + 0.5 * Math.sin(now / 240));
         executor.tick(dt);
     });
 
