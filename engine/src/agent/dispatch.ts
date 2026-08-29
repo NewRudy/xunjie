@@ -10,12 +10,14 @@
 // 本接口只加不减：/avatar/interpret 合同不变（风电页继续可用）。
 import { resetAnomaly } from '../anomalyState';
 import { resetTasks } from '../inspection';
+import { canonicalJson } from './context';
 import { findObjectByMention, findObjectByRef, getPackage, pickSpecs, RISK_LABEL_CN } from '../scene/registry';
 import type { SceneObject, ScenePackage } from '../scene/registry';
 import { nowIsoShanghai } from '../util';
+import { AvatarClarificationError } from './avatar';
 import type { AvatarCommand } from './avatar';
 import { interpretAvatar } from './avatar-llm';
-import { activeAdapter } from './model';
+import { activeAdapter, structured } from './model';
 import { createMission, handleSceneEvent, submitApproval, type Clarification } from './runtime';
 import { latestMissionId, loadMission, nextSeq, recentTurns, recordTrace, recordTurn, resetAgentData } from './store';
 import type { MissionState, PlannerInfo } from './types';
@@ -83,7 +85,7 @@ type MissionResolve = { ok: true; m: MissionState } | { ok: false; code: string;
 // 原则：回答只讲人话——关键事实组织成自然语句；ID/来源/编码留在 sceneBrief 结构化字段给前端使用。
 const IDENTITY_QA_RE = /你是谁|你叫什么|自我介绍|介绍(?:一下|下)?你自己/;
 const SCENE_QA_RE = /什么场景|啥场景|当前场景|这是(?:哪里|什么地方)|场景信息|现在是哪里|哪个场站|什么站/;
-const MISSION_QA_RE = /当前任务|任务状态|什么任务|啥任务|任务进展/;
+const MISSION_QA_RE = /当前任务|任务状态|什么任务|啥任务|任务进展|(?:有|查)(?:啥|什么|哪些).{0,4}任务|有任务吗|任务吗/;
 
 const OBJ_CMD_VERB_RE = /飞到|跑到|走到|前往|赶去|回去|回到|运维点|维修|修复|消缺|检修|查看|看看|聚焦|对准|停下|停止|站住|暂停|别动|左转|右转|转身|掉头|跳|采集|提交|取证|拍照|检查|巡检|排查|同意|批准|赞同|执行|拒绝|取消|证据|起飞|降落|落地|着陆|悬停|上升|下降|升高|降低|爬升/;
 const OBJ_REFERENT_RE = /它|这个设备|该设备|当前对象|当前设备|这台|该机组/;
@@ -121,6 +123,67 @@ function missionHumanLine(): string {
   return m ? `当前有一个巡检任务，${humanPhase(m.phase)}。` : '当前没有进行中的任务。';
 }
 
+// —— 事实托底 LLM 兜底：门控没接住的问句，把场景包事实喂给模型组织回答 ——
+// 模型只当发言人、不当数据源：回答不得出现任何编号（ID），数字必须逐字来自事实 JSON。
+const QUESTION_LIKE_RE = /什么|啥|怎么|怎样|哪|多少|几[个台只]|多长|多久|能不能|是不是|可不可以|[??]|吗$|呢$/;
+
+function isQuestionLike(text: string): boolean {
+  return QUESTION_LIKE_RE.test(text);
+}
+
+const REPLY_ID_RE = /HS-WTG|CP-WT|CP-B02|CP-INV|STR-|ANOM-|PECC-|WIND-|MSN-|OPS-|INV-[AB]|TASK-/;
+
+function factsContext(pkg: ScenePackage): Record<string, unknown> {
+  const devices = pkg.objects
+    .filter((o) => o.kind === 'device')
+    .map((o) => ({
+      名称: o.label,
+      状态: RISK_LABEL_CN[o.riskLevel ?? 'normal'],
+      ...(o.stateNote ? { 说明: o.stateNote } : {}),
+      ...(pickSpecs({ ...pkg.specs, ...(o.specs ?? {}) }, '', 3).reduce<Record<string, string>>((acc, [k, v]) => ({ ...acc, [k]: v }), {})),
+    }));
+  return {
+    场景: { 名称: pkg.name, 类型: pkg.kind },
+    设备: devices,
+    任务: missionHumanLine(),
+    提醒: '所有数据为演示仿真',
+  };
+}
+
+/** 事实托底回答：模型组织语言；校验失败（含 ID/编造数字/超长）重试一次，仍失败返回 null 走软化澄清 */
+async function answerWithFacts(text: string, pkg: ScenePackage): Promise<string | null> {
+  if (!activeAdapter()) return null;
+  const facts = factsContext(pkg);
+  const factsJson = canonicalJson(facts as never);
+  const res = await structured<Record<string, unknown>>({
+    messages: [
+      {
+        role: 'system',
+        content:
+          '你是「巡界」数字运维员，在新能源场站的三维现场回答运维人员的问题。' +
+          '只使用用户消息里「事实」JSON 中的信息回答；禁止编造任何数字、设备或结论；' +
+          '禁止输出任何编号或代码（如 HS-WTG、CP-WT、STR、MSN 等），说到某台设备用它的名称；' +
+          '用口语化中文回答，不超过 3 句。' +
+          '如果事实不足以回答，就如实说明，并建议一个可以问的问题（例如某台设备的状态、参数，或当前任务）。',
+      },
+      { role: 'user', content: `${JSON.stringify({ 事实: facts })}\n\n用户问题：${text}` },
+    ],
+    parse: (v) => (typeof v === 'object' && v !== null && !Array.isArray(v) && typeof (v as Record<string, unknown>).reply === 'string' ? (v as Record<string, unknown>) : null),
+    validator: (v) => {
+      const reply = String(v.reply).trim();
+      if (reply.length < 2 || reply.length > 200) return 'REPLY_LENGTH';
+      if (REPLY_ID_RE.test(reply)) return 'REPLY_CONTAINS_ID';
+      const tokens = reply.match(/\d+(?:\.\d+)?/g) ?? [];
+      if (!tokens.every((t) => factsJson.includes(t))) return 'REPLY_NUMBER_NOT_IN_FACTS';
+      return null;
+    },
+    schemaHint: '{"reply":"<中文回答>"}',
+    maxAttempts: 2,
+  });
+  if (!res.ok) return null;
+  return String(res.value.reply).trim();
+}
+
 function sceneMeta(pkg: ScenePackage) {
   return { sceneId: pkg.sceneId, sceneRevision: pkg.sceneRevision, name: pkg.name, sourceRef: pkg.sourceRef };
 }
@@ -154,9 +217,7 @@ function objectAnswer(pkg: ScenePackage, obj: SceneObject, text: string): Contex
   };
 }
 
-function answerContextQuestion(text: string, scene: 'pecc' | 'wind', sceneId: string, conversationId: string): ContextAnswer | null {
-  const pkg = getPackage(sceneId);
-  if (!pkg) return null;
+function answerContextQuestion(text: string, pkg: ScenePackage, scene: 'pecc' | 'wind', conversationId: string): ContextAnswer | null {
   const meta = sceneMeta(pkg);
   if (IDENTITY_QA_RE.test(text)) {
     return {
@@ -218,7 +279,8 @@ export async function dispatchAvatarText(input: DispatchInput): Promise<Dispatch
   const t0 = Date.now();
 
   // 上下文问答门控：元问题确定性作答，不消耗 LLM、不产生命令
-  const qa = answerContextQuestion(input.text, input.scene, input.sceneId, conversationId);
+  const pkg = getPackage(input.sceneId);
+  const qa = pkg ? answerContextQuestion(input.text, pkg, input.scene, conversationId) : null;
   if (qa) {
     const adapter = activeAdapter();
     trace.push({ label: '解释', status: 'ok', durationMs: Date.now() - t0, detail: 'context-qa' });
@@ -240,9 +302,49 @@ export async function dispatchAvatarText(input: DispatchInput): Promise<Dispatch
     };
   }
 
+  // 事实托底 LLM 兜底：像问句、不含命令动词、门控没接住 → 模型按场景包事实组织回答
+  if (pkg && !OBJ_CMD_VERB_RE.test(input.text) && isQuestionLike(input.text)) {
+    const tFacts = Date.now();
+    const answer = await answerWithFacts(input.text, pkg);
+    if (answer) {
+      const adapter = activeAdapter();
+      trace.push({ label: '解释', status: 'ok', durationMs: Date.now() - tFacts, detail: 'context-qa-llm' });
+      trace.push({ label: '总计', status: 'ok', durationMs: Date.now() - t0 });
+      recordTrace(`TRC-${nextSeq('trace')}`, conversationId, trace);
+      recordTurn(conversationId, { text: input.text, scene: input.scene, commands: [], outcomeSummary: 'context-qa-llm', ts: nowIsoShanghai() });
+      return {
+        kind: 'ok',
+        status: 'available',
+        conversationId,
+        trace,
+        sceneBrief: { kind: 'facts-qa' },
+        normalizedText: input.text,
+        reply: answer,
+        commands: [],
+        outcomes: [],
+        mission: null,
+        planner: adapter ? { mode: 'llm', modelAvailable: true } : { mode: 'deterministic-fallback', modelAvailable: false, reason: 'NO_CREDENTIALS' },
+      };
+    }
+  }
+
   const tInterpret = Date.now();
   const history = recentTurns(conversationId, 2).map((t) => ({ text: t.text, commands: t.commands }));
-  const { normalizedText, reply, commands, planner } = await interpretAvatar(input.text, input.scene, history);
+  let interp: Awaited<ReturnType<typeof interpretAvatar>>;
+  try {
+    interp = await interpretAvatar(input.text, input.scene, history);
+  } catch (e) {
+    // 问句被命令解析拒收时给软引导，不再甩「无法理解指令」
+    if (e instanceof AvatarClarificationError && isQuestionLike(input.text) && !OBJ_CMD_VERB_RE.test(input.text)) {
+      throw new AvatarClarificationError(
+        '这个问题我暂时答不准。可以问我：「3 号风机什么状态」「当前啥场景」「当前任务状态」，或者直接下达指令。',
+        e.examples,
+        e.planner,
+      );
+    }
+    throw e;
+  }
+  const { normalizedText, reply, commands, planner } = interp;
   trace.push({ label: '解释', status: 'ok', durationMs: Date.now() - tInterpret, detail: planner.mode });
 
   const outcomes: DispatchOutcome[] = [];

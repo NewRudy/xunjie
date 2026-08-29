@@ -13,18 +13,23 @@
     "test:avatar-llm": "tsx scripts/avatar-llm-test.mjs",
     "test:model-gateway": "tsx scripts/model-gateway-test.mjs",
     "test:dispatch": "node scripts/dispatch-test.mjs",
-    "test:evals": "tsx scripts/agent-evals-test.mjs"
+    "test:evals": "tsx scripts/agent-evals-test.mjs",
+    "test:voice": "tsx scripts/voice-test.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
-    "hono": "^4.6.14"
+    "hono": "^4.6.14",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

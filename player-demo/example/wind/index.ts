@@ -104,22 +104,8 @@ function el<T extends HTMLElement>(id: string): T {
     if (!e) throw new Error(`缺少 DOM 元素 #${id}`);
     return e as T;
 }
-const colliderStatusEl = el<HTMLDivElement>("collider-status");
-const engineStatusEl = el<HTMLDivElement>("engine-status");
-const execStatusEl = el<HTMLDivElement>("exec-status");
 const cmdForm = el<HTMLFormElement>("cmd-form");
 const cmdInput = el<HTMLInputElement>("cmd-input");
-const cmdLog = el<HTMLDivElement>("cmd-log");
-const assetCard = el<HTMLDivElement>("asset-card");
-const assetTitle = el<HTMLSpanElement>("asset-title");
-const assetBody = el<HTMLDivElement>("asset-body");
-const repairPanel = el<HTMLDivElement>("repair-panel");
-const repairTitle = el<HTMLSpanElement>("repair-title");
-const repairProgressText = el<HTMLSpanElement>("repair-progress-text");
-const repairBar = el<HTMLDivElement>("repair-bar");
-const repairStepsEl = el<HTMLOListElement>("repair-steps");
-const repairRecord = el<HTMLDivElement>("repair-record");
-const recordBody = el<HTMLDivElement>("record-body");
 const aiShell = el<HTMLDivElement>("ai-shell");
 const aiOrb = el<HTMLButtonElement>("ai-orb");
 const aiPanel = el<HTMLElement>("ai-panel");
@@ -136,8 +122,8 @@ for (const type of ["keydown", "keyup", "keypress"]) {
 // ==================== AI 悬浮球 + 对话面板（指挥唯一入口） ====================
 
 const ORB_SIZE = 58;
-const PANEL_W = 440;
-const PANEL_H = 520;
+const PANEL_W = 320;
+const PANEL_H = 400;
 const DRAG_THRESHOLD = 6;
 const ORB_POS_KEY = "xj-wind-orb-pos";
 const PANEL_POS_KEY = "xj-wind-panel-pos";
@@ -158,22 +144,28 @@ function savePos(key: string, p: { x: number; y: number }): void {
     try { localStorage.setItem(key, JSON.stringify(p)); } catch { /* 隐私模式等场景忽略 */ }
 }
 
-// 面板跟随悬浮球：球在左半屏 → 面板弹右侧，反之左侧；垂直方向 clamp 进视口
-function panelPositionForOrb(p: { x: number; y: number }): { x: number; y: number } {
+// 面板锚定在球的正下方：框顶贴球底 +8px，水平以球心居中并 clamp 进视口；
+// 球+框作为一个整体 clamp：整体高度超出视口时连同球一起上移
+const PANEL_GAP = 8;
+function layoutOrbPanel(p: { x: number; y: number }): { orb: { x: number; y: number }; panel: { x: number; y: number } } {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const orbCenterX = p.x + ORB_SIZE / 2;
-    const x = orbCenterX < vw / 2 ? p.x + ORB_SIZE + 14 : p.x - PANEL_W - 14;
-    const y = p.y + ORB_SIZE / 2 - PANEL_H / 2;
-    return {
-        x: clampNum(x, 8, Math.max(8, vw - PANEL_W - 8)),
-        y: clampNum(y, 8, Math.max(8, vh - PANEL_H - 8)),
+    const orb = {
+        x: clampNum(p.x, 8, Math.max(8, vw - ORB_SIZE - 8)),
+        y: clampNum(p.y, 8, Math.max(8, vh - ORB_SIZE - 8)),
     };
+    const totalH = ORB_SIZE + PANEL_GAP + PANEL_H;
+    if (orb.y + totalH > vh - 8) orb.y = Math.max(8, vh - 8 - totalH);
+    const panel = {
+        x: clampNum(orb.x + ORB_SIZE / 2 - PANEL_W / 2, 8, Math.max(8, vw - PANEL_W - 8)),
+        y: orb.y + ORB_SIZE + PANEL_GAP,
+    };
+    return { orb, panel };
 }
 
 let orbPos = loadPos(ORB_POS_KEY) ?? { x: window.innerWidth - ORB_SIZE - 20, y: window.innerHeight - ORB_SIZE - 20 };
 let panelFollowOrb = true;
-let panelPos = loadPos(PANEL_POS_KEY) ?? panelPositionForOrb(orbPos);
+let panelPos = loadPos(PANEL_POS_KEY) ?? layoutOrbPanel(orbPos).panel;
 
 function applyOrbPos(): void {
     aiOrb.style.left = `${orbPos.x}px`;
@@ -192,7 +184,12 @@ let aiOpen = false;
 function openPanel(): void {
     aiOpen = true;
     panelFollowOrb = true;
-    panelPos = panelPositionForOrb(orbPos);
+    // 球+框整体 clamp：框顶贴球底放不下的场合，把球一起上移
+    const g = layoutOrbPanel(orbPos);
+    orbPos = g.orb;
+    applyOrbPos();
+    savePos(ORB_POS_KEY, orbPos);
+    panelPos = g.panel;
     applyPanelPos();
     aiShell.dataset.open = "true";
     aiOrb.setAttribute("aria-expanded", "true");
@@ -236,7 +233,13 @@ function onOrbMove(e: PointerEvent): void {
         y: clampNum(e.clientY - ORB_SIZE / 2, 8, Math.max(8, window.innerHeight - ORB_SIZE - 8)),
     };
     applyOrbPos();
-    if (panelFollowOrb) { panelPos = panelPositionForOrb(orbPos); applyPanelPos(); }
+    if (panelFollowOrb) {
+        const g = layoutOrbPanel(orbPos);
+        orbPos = g.orb;
+        applyOrbPos();
+        panelPos = g.panel;
+        applyPanelPos();
+    }
 }
 function onOrbUp(): void {
     if (!orbDragging) return;
@@ -287,15 +290,21 @@ function onPanelUp(): void {
 aiClose.addEventListener("click", closePanel);
 
 window.addEventListener("resize", () => {
-    orbPos = {
-        x: clampNum(orbPos.x, 8, Math.max(8, window.innerWidth - ORB_SIZE - 8)),
-        y: clampNum(orbPos.y, 8, Math.max(8, window.innerHeight - ORB_SIZE - 8)),
-    };
+    if (panelFollowOrb) {
+        const g = layoutOrbPanel(orbPos);
+        orbPos = g.orb;
+        panelPos = g.panel;
+    } else {
+        orbPos = {
+            x: clampNum(orbPos.x, 8, Math.max(8, window.innerWidth - ORB_SIZE - 8)),
+            y: clampNum(orbPos.y, 8, Math.max(8, window.innerHeight - ORB_SIZE - 8)),
+        };
+        panelPos = {
+            x: clampNum(panelPos.x, 8, Math.max(8, window.innerWidth - PANEL_W - 8)),
+            y: clampNum(panelPos.y, 8, Math.max(8, window.innerHeight - PANEL_H - 8)),
+        };
+    }
     applyOrbPos();
-    panelPos = panelFollowOrb ? panelPositionForOrb(orbPos) : {
-        x: clampNum(panelPos.x, 8, Math.max(8, window.innerWidth - PANEL_W - 8)),
-        y: clampNum(panelPos.y, 8, Math.max(8, window.innerHeight - PANEL_H - 8)),
-    };
     applyPanelPos();
 });
 
@@ -334,34 +343,29 @@ syncTtsButton();
 function scrollAiToBottom(): void {
     aiMsgs.scrollTop = aiMsgs.scrollHeight;
 }
-function clearAiWelcome(): void {
-    aiMsgs.querySelector(".ai-welcome")?.remove();
+
+function nowTime(): string {
+    return new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }
 
-// 初始欢迎块
-{
-    const w = document.createElement("div");
-    w.className = "ai-welcome";
-    const title = document.createElement("strong");
-    title.textContent = "巡界 AI 助手";
-    const p = document.createElement("p");
-    p.textContent = "当前上下文：风电工程场景（老鸦岭 · SIMULATED 演示仿真）";
-    const ul = document.createElement("ul");
-    ul.className = "ai-capabilities";
-    for (const line of [
-        "中文指挥数字运维员移动 / 飞行 / 导航",
-        "发起维修仿真并留痕可追溯回执",
-        "查看风机信息与风险等级",
-        "回复支持浏览器本地语音播报（面板头部麦克风开关）",
-    ]) {
-        const li = document.createElement("li");
-        li.textContent = line;
-        ul.appendChild(li);
-    }
-    w.appendChild(title);
-    w.appendChild(p);
-    w.appendChild(ul);
-    aiMsgs.appendChild(w);
+// 系统气泡：仅用于需要用户知晓的异常提示（导航目标未登记/未知命令/初始化失败）；
+// 场景状态与维修步骤留痕只写 console 和维修记录卡，不上消息流
+function appendSystemLog(text: string): void {
+    const row = document.createElement("div");
+    row.className = "ai-msg sys";
+    const bubble = document.createElement("div");
+    bubble.className = "ai-bubble";
+    const time = document.createElement("span");
+    time.className = "ai-time";
+    time.textContent = nowTime();
+    const p = document.createElement("span");
+    p.className = "ai-tx";
+    p.textContent = text;
+    bubble.appendChild(time);
+    bubble.appendChild(p);
+    row.appendChild(bubble);
+    aiMsgs.appendChild(row);
+    scrollAiToBottom();
 }
 
 // ==================== Viewer（无 Ion、无世界地形、全本地内容） ====================
@@ -382,26 +386,12 @@ const viewer = new Viewer("cesiumContainer", {
 viewer.scene.globe.baseColor = Color.fromCssColorString("#0d141b");
 viewer.clock.shouldAnimate = true;
 
-// 帧率显示（与上游示例页一致）
-viewer.scene.debugShowFramesPerSecond = true;
-const fpsStyle = document.createElement("style");
-fpsStyle.textContent = `
-.cesium-performanceDisplay-defaultContainer {
-    top: auto; right: auto; bottom: 0; left: 0; z-index: 9999;
-}`;
-document.head.appendChild(fpsStyle);
-
 // ==================== 主流程 ====================
 
 async function main() {
     // 1. 读取场景 fixture（唯一事实源）
     const farm: FarmFixture = await (await fetch(`${BASE}wind/farm.json`)).json();
-
-    const creditsFooter = el<HTMLDivElement>("credits-footer");
-    creditsFooter.innerHTML = farm.credits.map((c) => `<div>${c}</div>`).join("");
-    const windCredit = document.createElement("div");
-    windCredit.textContent = "GPU 风场流线：cesium-wind-layer（MIT © Hongfa Qiu，vendor 拷贝）";
-    creditsFooter.appendChild(windCredit);
+    // 页面内不展示署名行；资产许可与作者信息以仓库 player-demo/UPSTREAM.md 为准
 
     const { origin } = farm;
     const localFrame = Transforms.eastNorthUpToFixedFrame(
@@ -562,22 +552,16 @@ async function main() {
             colliderDesc = "碰撞不可用（仅动画/运动演示）";
         }
     }
-    colliderStatusEl.textContent = `碰撞：${colliderDesc}`;
+    console.info(`[wind] 碰撞：${colliderDesc}`);
 
     // 3b. GPU 粒子风场流线（移植自黔风智维；局部 ENU 模型采样成 lon/lat 纹理交给 GPU 积分渲染）
-    const windField = createWindFieldLayer({
+    // 常开，不提供开关
+    createWindFieldLayer({
         viewer,
         localFrame,
         origin: { longitude: origin.lon, latitude: origin.lat, height: origin.heightM },
         config: WIND_FIELD_CONFIG,
         reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    });
-    const windToggleBtn = el<HTMLButtonElement>("windfield-toggle");
-    windToggleBtn.addEventListener("click", () => {
-        const next = !windField.isVisible();
-        windField.setVisible(next);
-        windToggleBtn.textContent = `风场流线：${next ? "开" : "关"}`;
-        windToggleBtn.classList.toggle("off", !next);
     });
 
     // 第一人称时隐藏人物模型
@@ -643,6 +627,37 @@ async function main() {
     }
     function clearBearingMarker() {
         if (bearingMarker) { viewer.entities.remove(bearingMarker); bearingMarker = null; }
+    }
+
+    // ---------- 场景截图 ----------
+
+    // 下载当前场景画面 PNG：强制重渲一帧再读 canvas（无 preserveDrawingBuffer，直接 toBlob 会拿到空图）。
+    // 页面不放任何 UI 入口；后端大模型在 commands[] 里返回 { kind: "capture_scene" } 即触发，
+    // 联调前也可在控制台手动调 window.xunjieCapture() 验证。
+    function captureSceneShot(): void {
+        viewer.scene.render();
+        viewer.scene.canvas.toBlob((blob) => {
+            if (!blob) { console.warn("[wind] 截图失败：canvas.toBlob 返回空"); return; }
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `xunjie-wind-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+            console.info(`[wind] 场景截图已下载：${a.download}`);
+        }, "image/png");
+    }
+    (window as unknown as { xunjieCapture?: () => void }).xunjieCapture = captureSceneShot;
+
+    // 截图是指令流里的瞬时动作：入队即执行，不阻塞后续命令
+    function makeCaptureScene(): Action {
+        let fired = false;
+        return {
+            update() {
+                if (!fired) { fired = true; captureSceneShot(); }
+                return true;
+            },
+            cancel() { /* 瞬时动作，无需中断处理 */ },
+        };
     }
 
     // 脉冲半径：每帧只算一次（两个 CallbackProperty 各自取 Date.now() 会有毫秒差，
@@ -735,8 +750,17 @@ async function main() {
         ];
         let seg = 0;
         let s = 0;
-        drawPath(pts);
-        // 语言指令不切换人物形态：保持当前模式沿空中航线位移（逐帧 reset 送达），到达后不强制落地
+        // 语言指令不切换人物形态：纯插值 reset 送达，不喂输入——
+        // 否则控制器每帧还会叠加自身的速度/重力解算，与 reset 打架造成抬升段抖动。
+        // 动画按航段直接指定（walk 模式悬空时 setAnimationByPressed 不会覆盖我们的选择）；
+        // 若用户已手动 F 进入飞行模式，则交给控制器自己的悬停动画。
+        const scriptedAnim = () => {
+            if (player.getIsFlying()) return;
+            player.playPlayerAnimationByName(
+                seg === 0 ? "flyHoverUp" : seg >= pts.length - 2 ? "flyidle" : "flyHoverForward",
+            );
+        };
+        scriptedAnim();
         return {
             update(dt) {
                 let done = false;
@@ -755,7 +779,7 @@ async function main() {
                     s += step;
                     const p = Cartesian3.lerp(a, b, s / segLen, new Cartesian3());
                     player.reset(localToWorld(p.x, p.y, p.z));
-                    player.setInput({ moveX: 0, moveY: 1, shift: false });
+                    scriptedAnim();
                     // 朝向对准目标水平方向（抬升/巡航段均适用）
                     const cur = playerLocal();
                     faceTowards(target.east - cur.x, target.north - cur.y, dt);
@@ -768,11 +792,16 @@ async function main() {
                 if (done) {
                     zeroInput();
                     clearPath();
+                    if (!player.getIsFlying()) player.playPlayerAnimationByName("idle");
                     return true;
                 }
                 return false;
             },
-            cancel() { zeroInput(); clearPath(); },
+            cancel() {
+                zeroInput();
+                clearPath();
+                if (!player.getIsFlying()) player.playPlayerAnimationByName("idle");
+            },
         };
     }
 
@@ -787,9 +816,23 @@ async function main() {
 
     // ---------- 动作：聚焦设备 ----------
 
+    // 风机信息卡：折进对话流（卡片气泡），不再用右侧悬浮卡
     function showAssetCard(t: FarmTurbine) {
-        assetTitle.textContent = `${t.label}（${RISK_LABEL[t.riskLevel]}）`;
-        assetBody.innerHTML = "";
+        const row = document.createElement("div");
+        row.className = "ai-msg bot";
+        const av = document.createElement("span");
+        av.className = "ai-av";
+        av.textContent = "AI";
+        row.appendChild(av);
+        const bubble = document.createElement("div");
+        bubble.className = "ai-bubble ai-bubble-card";
+
+        const card = document.createElement("div");
+        card.className = "ai-card";
+        const title = document.createElement("div");
+        title.className = "ai-card-title";
+        title.textContent = `风机信息 · ${t.label}（${RISK_LABEL[t.riskLevel]}）`;
+        card.appendChild(title);
         const rows: [string, string][] = [
             ["ID", t.id],
             ["风险等级", `${RISK_LABEL[t.riskLevel]}（${t.riskLevel}）`],
@@ -800,14 +843,33 @@ async function main() {
         ];
         for (const [k, v] of rows) {
             const div = document.createElement("div");
+            div.className = "ai-card-row";
             const kk = document.createElement("span");
             kk.className = "k";
             kk.textContent = k;
             div.appendChild(kk);
             div.appendChild(document.createTextNode(v));
-            assetBody.appendChild(div);
+            card.appendChild(div);
         }
-        assetCard.hidden = false;
+        if (cameraOverride) {
+            const action = document.createElement("div");
+            action.className = "ai-card-action";
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "capsule-btn";
+            btn.textContent = "恢复跟随视角";
+            btn.addEventListener("click", () => {
+                clearFocusRing();
+                cameraOverride = false;
+                btn.remove();
+            });
+            action.appendChild(btn);
+            card.appendChild(action);
+        }
+        bubble.appendChild(card);
+        row.appendChild(bubble);
+        aiMsgs.appendChild(row);
+        scrollAiToBottom();
     }
 
     function makeFocusAsset(cmd: AvatarCommand): Action | null {
@@ -841,50 +903,38 @@ async function main() {
 
     // ---------- 动作：维修仿真 ----------
 
-    function showRepairPanel(target: FarmRepairTarget, t: FarmTurbine) {
-        repairTitle.textContent = `维修仿真：${t.label} · ${target.componentLabel}（SIMULATED）`;
-        repairBar.style.width = "0%";
-        repairProgressText.textContent = `0/${target.steps.length}`;
-        repairStepsEl.innerHTML = "";
-        for (const step of target.steps) {
-            const li = document.createElement("li");
-            li.id = `repair-step-${step.id}`;
-            li.textContent = `${step.id} ${step.label}`;
-            repairStepsEl.appendChild(li);
-        }
-        repairPanel.hidden = false;
-    }
-
-    function markRepairStep(target: FarmRepairTarget, idx: number, time: string) {
-        const step = target.steps[idx];
-        const li = document.getElementById(`repair-step-${step.id}`);
-        if (li) {
-            li.classList.add("active");
-            const ts = document.createElement("span");
-            ts.className = "step-time";
-            ts.textContent = time;
-            li.appendChild(ts);
-        }
-        if (idx > 0) document.getElementById(`repair-step-${target.steps[idx - 1].id}`)?.classList.replace("active", "done");
-        repairBar.style.width = `${((idx + 1) / target.steps.length) * 100}%`;
-        repairProgressText.textContent = `${idx + 1}/${target.steps.length}`;
-    }
-
-    function hideRepairPanel() {
-        repairPanel.hidden = true;
-    }
-
+    // 维修记录卡：折进对话流（卡片气泡），不再是右侧悬浮卡
     function showRepairRecord(target: FarmRepairTarget, t: FarmTurbine, stamps: { id: string; label: string; time: string }[]) {
         const doneAt = new Date().toLocaleString("zh-CN", { hour12: false });
-        recordBody.innerHTML = "";
+        const row = document.createElement("div");
+        row.className = "ai-msg bot";
+        const av = document.createElement("span");
+        av.className = "ai-av";
+        av.textContent = "AI";
+        row.appendChild(av);
+        const bubble = document.createElement("div");
+        bubble.className = "ai-bubble ai-bubble-card";
+
+        const card = document.createElement("div");
+        card.className = "ai-card";
+        const title = document.createElement("div");
+        title.className = "ai-card-title";
+        title.textContent = "维修记录卡（可追溯回执）";
+        const sim = document.createElement("span");
+        sim.className = "ai-badge ai-badge-warn";
+        sim.textContent = "SIMULATED";
+        title.appendChild(sim);
+        card.appendChild(title);
+
         const addRow = (k: string, v: string) => {
             const div = document.createElement("div");
+            div.className = "ai-card-row";
             const kk = document.createElement("span");
             kk.className = "k";
             kk.textContent = k;
             div.appendChild(kk);
             div.appendChild(document.createTextNode(v));
-            recordBody.appendChild(div);
+            card.appendChild(div);
         };
         addRow("targetId", target.targetId);
         addRow("部件", `${target.componentId} · ${target.componentLabel}`);
@@ -892,21 +942,19 @@ async function main() {
         addRow("操作人", "巡界数字运维员（仿真）");
         addRow("truth", "SIMULATED");
         addRow("完成时间", doneAt);
-        const listTitle = document.createElement("div");
-        listTitle.style.marginTop = "6px";
-        listTitle.textContent = "步骤时间戳：";
-        recordBody.appendChild(listTitle);
         const ol = document.createElement("ol");
-        ol.style.margin = "2px 0 0";
-        ol.style.paddingLeft = "18px";
+        ol.className = "ai-card-steps";
         for (const s of stamps) {
             const li = document.createElement("li");
             li.textContent = `${s.id} ${s.label} — ${s.time}`;
             ol.appendChild(li);
         }
-        recordBody.appendChild(ol);
-        repairRecord.hidden = false;
-        appendSystemLog(`维修仿真完成：${t.label} ${target.componentLabel}，记录卡已生成（SIMULATED）`);
+        card.appendChild(ol);
+        bubble.appendChild(card);
+        row.appendChild(bubble);
+        aiMsgs.appendChild(row);
+        scrollAiToBottom();
+        console.info(`[wind] 维修仿真完成：${t.label} ${target.componentLabel}，记录卡已生成（SIMULATED）`);
     }
 
     function makeRepair(cmd: AvatarCommand): Action | null {
@@ -924,29 +972,31 @@ async function main() {
         const stamps: { id: string; label: string; time: string }[] = [];
         let stepIdx = -1;
         let stepTimer = 0;
-        let panelShown = false;
+        let started = false;
         return {
             update(dt) {
                 if (navAction) {
                     if (navAction.update(dt)) navAction = null;
                     return false;
                 }
-                if (!panelShown) { showRepairPanel(target, turbine); panelShown = true; }
+                if (!started) {
+                    started = true;
+                    console.info(`[wind] 维修仿真开始：${turbine.label} · ${target.componentLabel}（SIMULATED）`);
+                }
                 stepTimer += dt;
                 if (stepIdx === -1 || stepTimer >= 1.2) {
                     stepIdx += 1;
                     stepTimer = 0;
                     if (stepIdx >= target.steps.length) {
                         clearBearingMarker();
-                        hideRepairPanel();
                         showRepairRecord(target, turbine, stamps);
                         return true;
                     }
                     const step = target.steps[stepIdx];
                     const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
                     stamps.push({ id: step.id, label: step.label, time });
-                    markRepairStep(target, stepIdx, time);
-                    appendSystemLog(`维修步骤 ${step.id}：${step.label}`);
+                    // 步骤留痕只进 console 与最终维修记录卡，不再刷对话消息流
+                    console.info(`[wind] 维修步骤 ${step.id}：${step.label}（SIMULATED）`);
                     if (step.id === "RS-3") addBearingPulse(turbine, target.componentLabel);
                 }
                 return false;
@@ -954,8 +1004,7 @@ async function main() {
             cancel() {
                 navAction?.cancel();
                 clearBearingMarker();
-                hideRepairPanel();
-                appendSystemLog("维修仿真已中断");
+                console.info("[wind] 维修仿真已中断");
             },
         };
     }
@@ -1043,6 +1092,7 @@ async function main() {
             case "turn": return `转向 ${c.degrees}°`;
             case "jump": return "跳跃";
             case "stop": return "停止";
+            case "capture_scene": return "场景截图（下载 PNG）";
             default: return c.kind;
         }
     }
@@ -1056,6 +1106,7 @@ async function main() {
             case "turn": return makeTurn(cmd.degrees ?? 0);
             case "jump": return makeJump();
             case "stop": return { update: () => true, cancel: () => undefined }; // push 时已中断
+            case "capture_scene": return makeCaptureScene(); // 后端约定的截图指令（合同对齐中）
             default:
                 appendSystemLog(`命令 ${cmd.kind} 不属于风电场景登记范围，已跳过`);
                 return null;
@@ -1077,9 +1128,7 @@ async function main() {
             clearPath();
             clearFocusRing();
             clearBearingMarker();
-            hideRepairPanel();
             cameraOverride = false; // 恢复第三人称跟随
-            execStatusEl.textContent = "执行器：待命（WASD 移动 / Shift 冲刺 / Space 跳跃 / F 飞行 / V 视角）";
         },
         tick(dt: number) {
             let guard = 0;
@@ -1088,7 +1137,6 @@ async function main() {
                 const action = startCommand(cmd);
                 if (action) {
                     this.current = action;
-                    execStatusEl.textContent = `执行器：${describeCommand(cmd)}`;
                 }
             }
             if (!this.current) return;
@@ -1101,98 +1149,14 @@ async function main() {
             }
             if (done) {
                 this.current = null;
-                if (!this.queue.length) {
-                    execStatusEl.textContent = "执行器：待命（WASD 移动 / Shift 冲刺 / Space 跳跃 / F 飞行 / V 视角）";
-                }
             }
         },
     };
 
-    // ==================== HUD 日志 ====================
-
-    function nowTime(): string {
-        return new Date().toLocaleTimeString("zh-CN", { hour12: false });
-    }
-
-    function appendSystemLog(text: string) {
-        const entry = document.createElement("div");
-        entry.className = "log-entry";
-        const time = document.createElement("span");
-        time.className = "log-time";
-        time.textContent = nowTime();
-        const body = document.createElement("span");
-        body.className = "log-text";
-        body.textContent = text;
-        entry.appendChild(time);
-        entry.appendChild(body);
-        cmdLog.appendChild(entry);
-        cmdLog.scrollTop = cmdLog.scrollHeight;
-    }
-
-    function appendCommandLog(opts: {
-        time: string; text: string; reply?: string; plannerMode?: string;
-        commands?: AvatarCommand[]; examples?: string[]; warnings?: string[];
-    }) {
-        const entry = document.createElement("div");
-        entry.className = "log-entry";
-
-        const head = document.createElement("div");
-        const time = document.createElement("span");
-        time.className = "log-time";
-        time.textContent = opts.time;
-        const text = document.createElement("span");
-        text.className = "log-text";
-        text.textContent = `你：${opts.text}`;
-        head.appendChild(time);
-        head.appendChild(text);
-        entry.appendChild(head);
-
-        if (opts.plannerMode) {
-            const badge = document.createElement("span");
-            const isLlm = opts.plannerMode === "llm";
-            badge.className = `badge ${isLlm ? "badge-llm" : "badge-fallback"}`;
-            badge.textContent = isLlm ? "大模型解释" : "确定性回退";
-            badge.style.marginTop = "4px";
-            entry.appendChild(badge);
-        }
-        if (opts.reply) {
-            const reply = document.createElement("div");
-            reply.className = "log-reply";
-            reply.textContent = `回复：${opts.reply}`;
-            entry.appendChild(reply);
-        }
-        if (opts.commands?.length) {
-            const cmds = document.createElement("div");
-            cmds.className = "log-cmds";
-            for (const c of opts.commands) {
-                const chip = document.createElement("span");
-                chip.className = "cmd-chip";
-                chip.textContent = describeCommand(c);
-                cmds.appendChild(chip);
-            }
-            entry.appendChild(cmds);
-        }
-        if (opts.examples?.length) {
-            const ex = document.createElement("div");
-            ex.className = "log-examples";
-            ex.textContent = `示例：${opts.examples.join(" / ")}`;
-            entry.appendChild(ex);
-        }
-        if (opts.warnings?.length) {
-            const w = document.createElement("div");
-            w.className = "log-warnings";
-            w.textContent = opts.warnings.join("；");
-            entry.appendChild(w);
-        }
-        cmdLog.appendChild(entry);
-        cmdLog.scrollTop = cmdLog.scrollHeight;
-    }
-
     // ==================== 引擎指令链路 ====================
 
-    // 悬浮球面板消息（HUD 指令日志 appendCommandLog 同步保留）
+    // 悬浮球面板消息
     function appendAiUser(text: string) {
-        clearAiWelcome();
         const row = document.createElement("div");
         row.className = "ai-msg user";
         const av = document.createElement("span");
@@ -1220,7 +1184,20 @@ async function main() {
         examples?: string[];
         warnings?: string[];
     }) {
-        clearAiWelcome();
+        // planner / trace / outcomes 等元数据不上气泡（气泡只留 reply + 命令 chips），写 console 留底
+        if (opts.plannerMode) console.info(`[wind] planner=${opts.plannerMode}`);
+        if (opts.trace?.length) {
+            console.info(`[wind] trace ${opts.trace.length} 步：${opts.trace.map((s) => `${s.label}·${s.status}·${s.durationMs}ms`).join(" → ")}`);
+        }
+        if (opts.outcomes?.length) {
+            console.info(`[wind] 服务端编排：${opts.outcomes.map((o) => `${DISPATCH_LABEL[o.kind] ?? o.kind}:${o.status}`).join("，")}`);
+        }
+        if (opts.mission?.missionId) {
+            console.info(`[wind] 任务 ${opts.mission.missionId} · 阶段 ${opts.mission.phase ?? "未知"}`);
+        }
+        if (opts.examples?.length) console.info(`[wind] 示例：${opts.examples.join(" / ")}`);
+        if (opts.warnings?.length) console.warn(`[wind] ${opts.warnings.join("；")}`);
+
         const row = document.createElement("div");
         row.className = "ai-msg bot";
         const av = document.createElement("span");
@@ -1233,17 +1210,6 @@ async function main() {
         p.className = "ai-tx";
         p.textContent = opts.reply;
         bubble.appendChild(p);
-
-        const tools = document.createElement("div");
-        let hasTools = false;
-        if (opts.plannerMode) {
-            const badge = document.createElement("span");
-            const isLlm = opts.plannerMode === "llm";
-            badge.className = `badge ${isLlm ? "badge-llm" : "badge-fallback"}`;
-            badge.textContent = isLlm ? "大模型解释" : "确定性回退";
-            tools.appendChild(badge);
-            hasTools = true;
-        }
         if (opts.commands?.length) {
             const cmds = document.createElement("div");
             cmds.className = "ai-cmds";
@@ -1253,60 +1219,7 @@ async function main() {
                 chip.textContent = describeCommand(c);
                 cmds.appendChild(chip);
             }
-            tools.appendChild(cmds);
-            hasTools = true;
-        }
-        if (opts.outcomes?.length || opts.mission?.missionId) {
-            const facts = document.createElement("p");
-            facts.className = "ai-turn-facts";
-            const parts = (opts.outcomes ?? []).map((o) => {
-                const label = DISPATCH_LABEL[o.kind] ?? o.kind;
-                return o.status === "available"
-                    ? `服务端编排 · ${label}：已执行`
-                    : `服务端编排 · ${label}：未执行（${o.message ?? o.code ?? "失败"}）`;
-            });
-            const m = opts.mission;
-            if (m?.missionId) {
-                parts.push(`任务 ${m.missionId} · 阶段 ${m.phase ?? "未知"}${m.receipt?.kind === "mission_closed" ? " · 已闭环" : ""}`);
-            }
-            facts.textContent = parts.join("；");
-            tools.appendChild(facts);
-            hasTools = true;
-        }
-        if (opts.examples?.length) {
-            const ex = document.createElement("p");
-            ex.className = "ai-turn-facts";
-            ex.textContent = `示例：${opts.examples.join(" / ")}`;
-            tools.appendChild(ex);
-            hasTools = true;
-        }
-        if (opts.trace?.length) {
-            const det = document.createElement("details");
-            det.className = "ai-trace";
-            const sum = document.createElement("summary");
-            sum.textContent = `执行轨迹 trace（${opts.trace.length} 步）`;
-            det.appendChild(sum);
-            const ul = document.createElement("ul");
-            for (const s of opts.trace) {
-                const li = document.createElement("li");
-                li.className = `t-${s.status}`;
-                li.textContent = `${s.label} · ${s.status} · ${s.durationMs}ms${s.detail ? ` · ${s.detail}` : ""}`;
-                ul.appendChild(li);
-            }
-            det.appendChild(ul);
-            tools.appendChild(det);
-            hasTools = true;
-        }
-        if (opts.warnings?.length) {
-            const w = document.createElement("p");
-            w.className = "ai-turn-facts";
-            w.textContent = `警告：${opts.warnings.join("；")}`;
-            tools.appendChild(w);
-            hasTools = true;
-        }
-        if (hasTools) {
-            tools.className = "ai-turn-tools";
-            bubble.appendChild(tools);
+            bubble.appendChild(cmds);
         }
         row.appendChild(bubble);
         aiMsgs.appendChild(row);
@@ -1314,7 +1227,6 @@ async function main() {
     }
 
     async function sendInstruction(text: string) {
-        const time = nowTime();
         let res: Response;
         try {
             res = await fetch(ENGINE_URL, {
@@ -1329,14 +1241,11 @@ async function main() {
             });
         } catch (e) {
             console.warn("引擎连接失败:", e);
-            engineStatusEl.classList.remove("hud-hidden");
             const reply = "引擎未连接（localhost:8787），仅可手动控制";
-            appendCommandLog({ time, text, reply });
             appendAiBot({ reply });
             speak(reply);
             return;
         }
-        engineStatusEl.classList.add("hud-hidden");
         if (!res.ok) {
             let body: {
                 error?: { message?: string };
@@ -1346,11 +1255,6 @@ async function main() {
             } | null = null;
             try { body = await res.json(); } catch { body = null; }
             const reply = body?.clarification?.message ?? body?.error?.message ?? `引擎返回 HTTP ${res.status}`;
-            appendCommandLog({
-                time, text,
-                reply,
-                examples: body?.clarification?.examples,
-            });
             appendAiBot({
                 reply,
                 examples: body?.clarification?.examples,
@@ -1362,25 +1266,8 @@ async function main() {
         }
         const body = (await res.json()) as InterpretResponse;
         const commands = body.data?.commands ?? [];
-        appendCommandLog({
-            time, text,
-            reply: body.data?.reply,
-            plannerMode: body.planner?.mode,
-            commands,
-            warnings: body.warnings,
-        });
         const outcomes = body.data?.dispatch ?? [];
         const mission = body.data?.mission;
-        if (outcomes.length || mission?.missionId) {
-            const parts = outcomes.map((o) => {
-                const label = DISPATCH_LABEL[o.kind] ?? o.kind;
-                return o.status === "available" ? `${label}：已执行` : `${label}：未执行（${o.message ?? o.code ?? "失败"}）`;
-            });
-            if (mission?.missionId) {
-                parts.push(`任务 ${mission.missionId} · 阶段 ${mission.phase ?? "未知"}${mission.receipt?.kind === "mission_closed" ? " · 已闭环" : ""}`);
-            }
-            appendCommandLog({ time, text: "服务端编排", reply: parts.join("；") });
-        }
         appendAiBot({
             reply: body.data?.reply ?? "（无回复）",
             plannerMode: body.planner?.mode,
@@ -1407,6 +1294,77 @@ async function main() {
         submitText(cmdInput.value);
     });
 
+    // ---------- 语音输入（豆包 ASR：按住说话 → engine /voice/asr → 文字走同一指令链路） ----------
+    const ENGINE_VOICE_URL = "http://localhost:8787/api/agent/voice/asr";
+    const cmdMic = el<HTMLButtonElement>("cmd-mic");
+    let micRecording = false;
+
+    function floatToInt16(input: Float32Array): Int16Array {
+        const out = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        return out;
+    }
+
+    async function startMicCapture(): Promise<void> {
+        if (micRecording) return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+            const ctx = new AudioContext({ sampleRate: 16000 });
+            const source = ctx.createMediaStreamSource(stream);
+            const processor = ctx.createScriptProcessor(4096, 1, 1);
+            const chunks: Int16Array[] = [];
+            processor.onaudioprocess = (ev) => {
+                if (!micRecording) return;
+                chunks.push(floatToInt16(ev.inputBuffer.getChannelData(0)));
+            };
+            source.connect(processor);
+            processor.connect(ctx.destination);
+            micRecording = true;
+            cmdMic.classList.add("recording");
+            cmdMic.title = "松开结束并识别…";
+            const finish = async () => {
+                micRecording = false;
+                cmdMic.classList.remove("recording");
+                cmdMic.title = "按住说话（豆包语音识别）";
+                try {
+                    processor.disconnect();
+                    source.disconnect();
+                    stream.getTracks().forEach((t) => t.stop());
+                    await ctx.close();
+                } catch { /* 忽略清理异常 */ }
+                const total = chunks.reduce((s, c) => s + c.length, 0);
+                const pcm = new Int16Array(total);
+                let off = 0;
+                for (const c of chunks) { pcm.set(c, off); off += c.length; }
+                if (pcm.length < 3200) { appendSystemLog("说话时间太短，没有录到内容"); return; }
+                try {
+                    const res = await fetch(ENGINE_VOICE_URL, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: pcm.buffer });
+                    const body = await res.json();
+                    const text = String(body?.data?.text ?? "").trim();
+                    if (res.ok && text) {
+                        submitText(text);
+                    } else {
+                        appendSystemLog(body?.error?.message ?? "没有听清，请再试一次");
+                    }
+                } catch {
+                    appendSystemLog("语音服务未连接（localhost:8787），可继续使用文字指令");
+                }
+            };
+            cmdMic.addEventListener("pointerup", () => { void finish(); }, { once: true });
+            cmdMic.addEventListener("pointerleave", () => { void finish(); }, { once: true });
+        } catch {
+            appendSystemLog("无法访问麦克风：请检查浏览器权限");
+        }
+    }
+    cmdMic.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        void startMicCapture();
+    });
+    cmdMic.addEventListener("contextmenu", (e) => e.preventDefault());
+
     // 快捷指令 chips：直接发送（面板未展开时顺手展开）
     document.querySelectorAll<HTMLButtonElement>("#ai-quick button[data-q]").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -1415,17 +1373,7 @@ async function main() {
         });
     });
 
-    // 信息卡关闭：同时恢复跟随视角、去掉高亮环
-    el<HTMLButtonElement>("asset-close").addEventListener("click", () => {
-        assetCard.hidden = true;
-        clearFocusRing();
-        cameraOverride = false;
-    });
-    el<HTMLButtonElement>("record-close").addEventListener("click", () => {
-        repairRecord.hidden = true;
-    });
-
-    // ==================== 点击风机弹信息卡 ====================
+    // ==================== 点击风机弹信息卡（气泡） ====================
 
     const pickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     pickHandler.setInputAction((e: ScreenSpaceEventHandler.PositionedEvent) => {
@@ -1451,10 +1399,11 @@ async function main() {
         executor.tick(dt);
     });
 
-    appendSystemLog(`场景就绪：${farm.name}（${farm.sceneId}@${farm.sceneRevision}），10 台风机已登记`);
+    console.info(`[wind] 场景就绪：${farm.name}（${farm.sceneId}@${farm.sceneRevision}），10 台风机已登记`);
+    console.info("[wind] 键位：WASD 移动 / Shift 冲刺 / Space 跳跃 / F 飞行 / V 视角");
 }
 
 main().catch((e) => {
     console.error("初始化失败:", e);
-    colliderStatusEl.textContent = `初始化失败：${e instanceof Error ? e.message : String(e)}`;
+    appendSystemLog(`初始化失败：${e instanceof Error ? e.message : String(e)}`);
 });

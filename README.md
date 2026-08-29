@@ -83,6 +83,19 @@ pnpm dev
 
 人物命令和任务提案都要通过语义 ID、数字溯源、证据和动作白名单校验；调用失败或校验不通过会显式回退。人物面板会独立显示本轮是“大模型”还是“确定性回退”。不要把密钥写入仓库、文档、日志或截图。当前仓库验收未使用用户模型凭据，因此默认截图是确定性回退态。
 
+### 可选：语音输入（豆包 ASR）
+
+场景页 AI 面板的麦克风按钮为"按住说话"。协议移植自管网智能体（pipe-report-agent），需要豆包语音凭据：
+
+```bash
+export DOUBAO_ASR_RESOURCE_ID='<豆包 ASR resource id>'
+export DOUBAO_ASR_API_KEY='<X-Api-Key>'            # 或 APP_KEY/ACCESS_KEY 二元组
+# 可选：DOUBAO_ASR_ENDPOINT / DOUBAO_ASR_HOTWORD_TABLE_ID / DOUBAO_ASR_CORRECT_TABLE_ID
+pnpm dev
+```
+
+未配置时接口返回 `VOICE_NOT_CONFIGURED`，页面提示改用文字指令，主链不受影响。回复播报使用浏览器本地 TTS。
+
 ## 当前已实现
 
 - Vue 3 + CesiumJS 程序化光伏园区，设备、异常、路线和检查点使用统一语义 ID。

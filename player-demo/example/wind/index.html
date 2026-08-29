@@ -6,202 +6,39 @@
     <title>风电工程场景 · 巡界 XUNJIE</title>
     <style>
         html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
-        body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
-
-        .panel {
-            background: rgba(10, 15, 22, 0.72);
-            border: 1px solid rgba(255, 255, 255, 0.16);
-            border-radius: 10px;
-            color: #eaf2ff;
-            backdrop-filter: blur(6px);
-            box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4);
+        body {
+            font-family: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
         }
 
-        /* ── 顶部 HUD ── */
-        #hud-panel {
-            position: fixed;
-            left: 12px;
-            top: 12px;
-            z-index: 9999;
-            width: 400px;
-            max-width: calc(100vw - 24px);
-            max-height: 72vh;
-            display: flex;
-            flex-direction: column;
-            padding: 12px 14px;
-            font-size: 13px;
-        }
-        .hud-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 6px;
-        }
-        .hud-title { font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
-        .badge {
-            display: inline-block;
-            padding: 2px 7px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            white-space: nowrap;
-        }
-        .badge-sim { color: #ffd479; border: 1px solid rgba(255, 212, 121, 0.65); background: rgba(255, 212, 121, 0.1); }
-        .badge-llm { color: #8be89b; border: 1px solid rgba(139, 232, 155, 0.6); background: rgba(139, 232, 155, 0.1); }
-        .badge-fallback { color: #ffb86b; border: 1px solid rgba(255, 184, 107, 0.6); background: rgba(255, 184, 107, 0.1); }
-        .badge-risk-critical { color: #ff7b7b; border: 1px solid rgba(255, 123, 123, 0.6); }
-        .badge-risk-warning { color: #ffd479; border: 1px solid rgba(255, 212, 121, 0.6); }
-        .badge-risk-normal { color: #8be89b; border: 1px solid rgba(139, 232, 155, 0.6); }
-        .hud-sub { color: #a9b8cc; font-size: 12px; line-height: 1.5; margin-bottom: 2px; }
-        .hud-warn { color: #ffb86b; }
-        .hud-hidden { display: none !important; }
-
-        .hud-toggle {
-            padding: 2px 9px;
-            border-radius: 4px;
-            border: 1px solid rgba(97, 218, 251, 0.45);
-            background: rgba(97, 218, 251, 0.1);
-            color: #9be2f5;
-            font-size: 11px;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-        .hud-toggle:hover { border-color: rgba(97, 218, 251, 0.8); }
-        .hud-toggle.off { color: #7d8da1; border-color: rgba(255, 255, 255, 0.18); background: transparent; }
-
-        #cmd-log {
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            font-size: 12px;
-            line-height: 1.5;
-            margin-top: 8px;
-        }
-        .log-entry { border-top: 1px dashed rgba(255, 255, 255, 0.14); padding-top: 6px; }
-        .log-time { color: #7d8da1; margin-right: 6px; }
-        .log-text { color: #cfe3ff; }
-        .log-reply { color: #eaf2ff; margin-top: 2px; }
-        .log-cmds { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px; }
-        .cmd-chip {
-            display: inline-block;
-            padding: 1px 6px;
-            border-radius: 4px;
-            background: rgba(97, 218, 251, 0.12);
-            border: 1px solid rgba(97, 218, 251, 0.4);
-            color: #9be2f5;
-            font-size: 11px;
-            font-family: ui-monospace, Menlo, Consolas, monospace;
-        }
-        .log-examples { color: #a9b8cc; margin-top: 2px; }
-        .log-warnings { color: #ffd479; margin-top: 2px; }
-
-        /* ── 右侧信息卡 / 记录卡 ── */
-        .side-card {
-            position: fixed;
-            right: 12px;
-            z-index: 9999;
-            width: 310px;
-            max-width: calc(100vw - 24px);
-            padding: 12px 14px;
-            font-size: 13px;
-        }
-        #asset-card { top: 12px; }
-        #repair-record { top: 12px; }
-        .side-card-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-        .close-btn {
-            border: none;
-            background: transparent;
-            color: #a9b8cc;
-            font-size: 18px;
-            line-height: 1;
-            cursor: pointer;
-            padding: 0 2px;
-        }
-        .close-btn:hover { color: #fff; }
-        .side-card-body { color: #cfe3ff; font-size: 12px; line-height: 1.7; }
-        .side-card-body .k { color: #7d8da1; display: inline-block; min-width: 76px; }
-        .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
-
-        /* ── 维修进度面板 ── */
-        #repair-panel {
-            position: fixed;
-            left: 12px;
-            bottom: 12px;
-            z-index: 9999;
-            width: 420px;
-            max-width: calc(100vw - 24px);
-            padding: 12px 14px;
-            font-size: 13px;
-        }
-        .progress {
-            height: 8px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.12);
-            overflow: hidden;
-            margin: 8px 0;
-        }
-        #repair-bar { height: 100%; width: 0; background: linear-gradient(90deg, #1e88e5, #61dafb); transition: width 0.25s ease; }
-        #repair-steps { margin: 0; padding-left: 20px; color: #a9b8cc; font-size: 12px; line-height: 1.8; }
-        #repair-steps li.done { color: #8be89b; }
-        #repair-steps li.active { color: #ffd479; font-weight: 700; }
-        #repair-steps .step-time { color: #7d8da1; font-family: ui-monospace, Menlo, Consolas, monospace; margin-left: 6px; }
-
-        /* ── 页脚 credits ── */
-        #credits-footer {
-            position: fixed;
-            left: 50%;
-            bottom: 10px;
-            transform: translateX(-50%);
-            z-index: 9998;
-            padding: 6px 14px;
-            border-radius: 8px;
-            background: rgba(10, 15, 22, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            color: #9fb2c8;
-            font-size: 11px;
-            line-height: 1.6;
-            text-align: center;
-            backdrop-filter: blur(4px);
-            pointer-events: none;
-            white-space: nowrap;
-        }
+        /* Cesium 角标（ion logo/版权容器）隐藏：署名义务转移至仓库 UPSTREAM.md */
+        .cesium-viewer-bottom { display: none !important; }
 
         .back-link {
             position: fixed;
             left: 12px;
-            bottom: 12px;
+            top: 12px;
             z-index: 9999;
-            color: #cfe3ff;
-            background: rgba(10, 15, 22, 0.6);
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 13px;
+            color: rgba(127, 163, 181, 0.75);
+            background: rgba(13, 25, 35, 0.45);
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(120, 200, 230, 0.12);
+            font-size: 11px;
             text-decoration: none;
             backdrop-filter: blur(4px);
+            transition: color 150ms ease, border-color 150ms ease;
         }
-        .back-link:hover { color: #fff; }
-        /* 维修进度面板与返回链接同侧，避免重叠 */
-        #repair-panel:not([hidden]) ~ .back-link { bottom: 190px; }
+        .back-link:hover { color: #d8f5ff; border-color: rgba(120, 200, 230, 0.35); }
 
-        /* ══════════ AI 悬浮球 + 对话面板（移植自黔风智维 v2 AssistantPanel，原生实现） ══════════ */
+        /* ══════════ AI 悬浮球 + 对话面板（样式向首页对齐：深色玻璃 + 细边 + 圆角胶囊） ══════════ */
         .assistant-shell {
-            --ai-fg: oklch(0.93 0.008 220);
-            --ai-muted: oklch(0.68 0.015 225);
-            --ai-faint: oklch(0.52 0.015 228);
-            --ai-border: oklch(0.38 0.020 230 / 0.55);
-            --ai-hairline: oklch(0.32 0.02 232 / 0.35);
-            --ai-accent: oklch(0.74 0.080 200);
-            --ai-accent-dim: oklch(0.74 0.080 200 / 0.14);
+            --ai-accent: #43c9e8;
+            --ai-accent-2: #789fd9;
+            --ai-hot: #d8f5ff;
+            --ai-fg: #dceef6;
+            --ai-muted: #7fa3b5;
+            --ai-hairline: rgba(120, 200, 230, 0.1);
+            --ai-warn: #e8a020;
             --font-mono: ui-monospace, Menlo, Consolas, monospace;
             position: fixed;
             inset: 0;
@@ -210,7 +47,7 @@
         }
         .assistant-shell > * { pointer-events: auto; }
 
-        /* ---------- 悬浮球 ---------- */
+        /* ---------- 悬浮球（外观动画原样保留） ---------- */
         .assistant-orb {
             position: absolute;
             width: 58px;
@@ -240,8 +77,17 @@
             --orb-primary: #43c9e8;
             --orb-secondary: #789fd9;
             --orb-hot: #d8f5ff;
-            transition: transform 180ms ease, border-color 180ms ease, filter 180ms ease, box-shadow 180ms ease;
+            transition: transform 180ms ease, border-color 180ms ease, filter 180ms ease, box-shadow 180ms ease, opacity 200ms ease;
         }
+        /* 待机静默：平时半透明，环/轨道/粒子动画暂停（保留核心呼吸）；展开面板或 hover 时全亮 */
+        .assistant-shell:not([data-open="true"]) .assistant-orb { opacity: 0.4; }
+        .assistant-shell:not([data-open="true"]) .assistant-orb:hover { opacity: 0.8; }
+        .assistant-shell:not([data-open="true"]) .assistant-orb::before,
+        .assistant-shell:not([data-open="true"]) .assistant-orb::after,
+        .assistant-shell:not([data-open="true"]) .assistant-orb__ring--outer,
+        .assistant-shell:not([data-open="true"]) .assistant-orb__ring--inner,
+        .assistant-shell:not([data-open="true"]) .assistant-orb__orbit,
+        .assistant-shell:not([data-open="true"]) .assistant-orb__particle { animation-play-state: paused; }
         .assistant-orb:hover {
             transform: scale(1.08);
             filter: brightness(1.12) saturate(1.08);
@@ -426,89 +272,89 @@
             .assistant-orb::after { animation: none !important; }
         }
 
-        /* ---------- 对话面板：双层渐变 + 斜切轮廓 ---------- */
+        /* ---------- 对话面板：深色玻璃 + 顶部淡青微光 + 青→蓝紫渐变描边 ---------- */
         .assistant-panel {
             position: absolute;
             display: none;
             flex-direction: column;
             overflow: hidden;
             color: var(--ai-fg);
-            border: none;
-            background: transparent;
-            filter: drop-shadow(0 16px 40px rgba(0, 0, 0, 0.50));
-            clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+            border: 1px solid transparent;
+            background:
+                radial-gradient(ellipse 140% 55% at 50% -10%, rgba(67, 201, 232, 0.16), transparent 65%) padding-box,
+                linear-gradient(rgba(13, 25, 35, 0.78), rgba(13, 25, 35, 0.78)) padding-box,
+                linear-gradient(155deg, rgba(67, 201, 232, 0.6), rgba(120, 159, 217, 0.3) 55%, rgba(67, 201, 232, 0.15)) border-box;
+            backdrop-filter: blur(10px);
+            border-radius: 14px;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), 0 0 24px rgba(67, 201, 232, 0.06);
         }
         .assistant-shell[data-open="true"] .assistant-panel { display: flex; }
-        .assistant-panel::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            z-index: -2;
-            background: linear-gradient(180deg, oklch(0.52 0.028 226 / 0.62), oklch(0.38 0.022 230 / 0.40));
-            clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
-        }
-        .assistant-panel::after {
-            content: "";
-            position: absolute;
-            inset: 1px;
-            z-index: -1;
-            background: oklch(0.185 0.018 234 / 0.88);
-            backdrop-filter: blur(14px);
-            clip-path: polygon(8.6px 0, 100% 0, 100% calc(100% - 8.6px), calc(100% - 8.6px) 100%, 0 100%, 0 8.6px);
-        }
+
         .assistant-panel-head {
             flex: none;
             display: flex;
             align-items: center;
-            gap: 9px;
-            padding: 11px 14px 10px;
+            gap: 7px;
+            padding: 8px 10px;
             cursor: move;
             user-select: none;
-            position: relative;
-            background: oklch(0.27 0.022 232 / 0.20);
-            clip-path: polygon(8.6px 0, 100% 0, 100% 100%, 0 100%, 0 8.6px);
+            border-bottom: 1px solid var(--ai-hairline);
         }
-        .assistant-panel-head::after {
-            content: "";
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 1px;
-            background: linear-gradient(90deg, oklch(0.74 0.08 200 / 0.42) 0%, oklch(0.50 0.03 225 / 0.26) 34%, oklch(0.45 0.03 225 / 0.04) 100%);
-        }
-        .assistant-grip {
-            width: 8px;
-            height: 12px;
+        /* 标题左侧发光点：呼应首页 wordmark 的青色光源 */
+        .assistant-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
             flex: none;
-            opacity: 0.45;
-            background-image: radial-gradient(oklch(0.62 0.015 225) 1px, transparent 1.3px);
-            background-size: 6px 5px;
+            background: var(--ai-accent);
+            box-shadow: 0 0 6px rgba(67, 201, 232, 0.9), 0 0 14px rgba(67, 201, 232, 0.45);
+            animation: assistant-dot-breathe 2.6s ease-in-out infinite;
         }
-        .assistant-title { font-size: 14px; font-weight: 600; letter-spacing: 0.1em; }
-        .assistant-context {
-            margin-left: auto;
-            max-width: 140px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-size: 11px;
-            color: var(--ai-accent);
-            background: var(--ai-accent-dim);
-            border: 1px solid oklch(0.60 0.07 200 / 0.5);
+        @keyframes assistant-dot-breathe { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+        .assistant-title { font-size: 12.5px; font-weight: 700; letter-spacing: 0.05em; }
+
+        .ai-badge {
+            display: inline-block;
+            font-size: 10px;
+            letter-spacing: 0.05em;
             padding: 2px 8px;
-            border-radius: 2px;
-            font-family: var(--font-mono);
+            border-radius: 999px;
+            white-space: nowrap;
         }
+        .ai-badge-warn {
+            border: 1px solid rgba(232, 160, 32, 0.45);
+            color: var(--ai-warn);
+            background: rgba(232, 160, 32, 0.1);
+        }
+
+        .assistant-head-actions {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .capsule-btn {
+            padding: 2px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(67, 201, 232, 0.4);
+            background: rgba(67, 201, 232, 0.08);
+            color: var(--ai-accent);
+            font-size: 10.5px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: border-color 150ms ease, color 150ms ease;
+        }
+        .capsule-btn:hover { border-color: rgba(67, 201, 232, 0.75); }
+        .capsule-btn.off { color: var(--ai-muted); border-color: var(--ai-hairline); background: transparent; }
+
         .assistant-head-btn,
         .assistant-close {
-            margin-left: 6px;
             width: 22px;
             height: 22px;
             flex: none;
             border: none;
             background: none;
-            color: var(--ai-faint);
+            color: var(--ai-muted);
             font-size: 14px;
             line-height: 1;
             cursor: pointer;
@@ -516,181 +362,206 @@
             align-items: center;
             justify-content: center;
             padding: 0;
+            border-radius: 50%;
         }
         .assistant-head-btn:hover,
         .assistant-close:hover { color: var(--ai-fg); }
         .assistant-head-btn[aria-pressed="true"] { color: var(--ai-accent); }
-        .assistant-head-btn:disabled { color: var(--ai-faint); opacity: 0.5; cursor: not-allowed; }
-        .assistant-close { font-size: 18px; }
+        .assistant-head-btn:disabled { color: var(--ai-muted); opacity: 0.45; cursor: not-allowed; }
+        .assistant-close { font-size: 17px; }
 
         .assistant-msgs {
             flex: 1;
             min-height: 0;
             overflow-y: auto;
-            padding: 12px 14px;
+            padding: 8px 10px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 7px;
             scrollbar-width: thin;
-            scrollbar-color: oklch(0.46 0.02 230 / 0.45) transparent;
+            scrollbar-color: rgba(120, 200, 230, 0.22) transparent;
         }
-        .ai-welcome { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
-        .ai-welcome > strong { font-size: 15px; color: var(--ai-fg); }
-        .ai-welcome > p { margin: 0; font-size: 12px; color: var(--ai-muted); }
-        .ai-capabilities { margin: 0; padding-left: 18px; font-size: 12px; color: var(--ai-muted); line-height: 1.7; }
 
-        .assistant-quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 8px; flex: none; }
+        .assistant-quick { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 10px 6px; flex: none; }
         .assistant-quick button {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--ai-muted);
             background: transparent;
             border: 1px solid var(--ai-hairline);
-            border-radius: 2px;
-            padding: 4px 9px;
+            border-radius: 999px;
+            padding: 2px 9px;
             cursor: pointer;
             letter-spacing: 0.03em;
-            transition: border-color 180ms ease, color 180ms ease;
+            transition: border-color 150ms ease, color 150ms ease;
         }
-        .assistant-quick button:hover { color: var(--ai-accent); border-color: oklch(0.60 0.07 200 / 0.6); }
+        .assistant-quick button:hover { color: var(--ai-accent); border-color: rgba(67, 201, 232, 0.55); }
 
-        .ai-msg { display: flex; gap: 8px; align-items: flex-start; }
+        /* ---------- 消息流（聊天 App 布局：气泡自适应内容宽度，用户右对齐 / AI 左对齐） ---------- */
+        .ai-msg { display: flex; gap: 6px; align-items: flex-start; }
         .ai-msg.user { flex-direction: row-reverse; }
         .ai-av {
-            width: 24px;
-            height: 24px;
-            border-radius: 6px;
+            width: 22px;
+            height: 22px;
+            border-radius: 7px;
             flex: none;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 10.5px;
         }
         .ai-msg.bot .ai-av {
-            background: var(--ai-accent-dim);
+            background: rgba(67, 201, 232, 0.1);
             color: var(--ai-accent);
-            border: 1px solid oklch(0.60 0.07 200 / 0.5);
+            border: 1px solid rgba(67, 201, 232, 0.35);
         }
-        .ai-msg.user .ai-av { background: oklch(0.32 0.02 232 / 0.7); color: var(--ai-muted); }
+        .ai-msg.user .ai-av { background: rgba(120, 200, 230, 0.1); color: var(--ai-muted); }
         .ai-bubble {
-            flex: 1;
+            flex: 0 1 auto;
+            width: fit-content;
+            max-width: 78%;
             min-width: 0;
-            padding: 8px 11px;
-            border-radius: 3px;
+            padding: 5px 9px;
+            border-radius: 10px;
             border: 1px solid var(--ai-hairline);
-            background: oklch(0.24 0.02 233 / 0.55);
+            background: rgba(16, 32, 44, 0.5);
         }
-        .ai-msg.user .ai-bubble { background: oklch(0.28 0.02 232 / 0.35); }
+        /* 卡片气泡（风机信息 / 维修记录卡）保持宽版，不随文本收缩 */
+        .ai-bubble-card { width: 100%; max-width: 96%; }
+        .ai-msg.user .ai-bubble {
+            background: rgba(67, 201, 232, 0.09);
+            border-color: rgba(67, 201, 232, 0.24);
+        }
         .ai-tx {
             margin: 0;
-            font-size: 13px;
-            line-height: 1.7;
+            font-size: 12px;
+            line-height: 1.65;
             color: var(--ai-fg);
             white-space: pre-wrap;
             word-break: break-word;
             overflow-wrap: break-word;
         }
-        .ai-msg.user .ai-tx { color: var(--ai-muted); }
-        .ai-turn-tools {
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px solid var(--ai-hairline);
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+
+        /* 系统气泡（场景就绪 / 键位提示 / 维修步骤留痕）：紧凑胶囊居中 */
+        .ai-msg.sys { justify-content: center; }
+        .ai-msg.sys .ai-bubble {
+            flex: none;
+            max-width: 100%;
+            padding: 3px 11px;
+            border-radius: 999px;
+            border-style: dashed;
+            background: rgba(13, 25, 35, 0.4);
         }
-        .ai-turn-facts { margin: 0; font-size: 12px; color: var(--ai-muted); }
-        .ai-cmds { display: flex; gap: 6px; flex-wrap: wrap; }
-        .ai-trace { font-size: 11px; color: var(--ai-muted); }
-        .ai-trace summary { cursor: pointer; color: var(--ai-accent); list-style: none; }
-        .ai-trace summary::-webkit-details-marker { display: none; }
-        .ai-trace ul { margin: 6px 0 0; padding-left: 16px; }
-        .ai-trace li { margin-bottom: 3px; font-family: var(--font-mono); }
-        .ai-trace .t-ok { color: var(--ai-muted); }
-        .ai-trace .t-warn { color: #ffd479; }
-        .ai-trace .t-error { color: #ff7b7b; }
+        .ai-msg.sys .ai-tx { font-size: 11px; color: var(--ai-muted); }
+        .ai-time { font-family: var(--font-mono); color: rgba(67, 201, 232, 0.6); margin-right: 6px; }
+
+        .ai-cmds { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+        .cmd-chip {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 999px;
+            background: rgba(67, 201, 232, 0.09);
+            border: 1px solid rgba(67, 201, 232, 0.32);
+            color: var(--ai-accent);
+            font-size: 10.5px;
+            font-family: var(--font-mono);
+        }
+
+        /* 面板内卡片（风机信息 / 维修记录卡气泡） */
+        .ai-card {
+            border: 1px solid var(--ai-hairline);
+            border-radius: 10px;
+            background: rgba(10, 20, 28, 0.45);
+            padding: 8px 10px;
+        }
+        .ai-card-title {
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ai-card-row { font-size: 11.5px; color: var(--ai-fg); line-height: 1.75; word-break: break-all; }
+        .ai-card-row .k { color: var(--ai-muted); display: inline-block; min-width: 76px; }
+        .ai-card-steps { margin: 4px 0 0; padding-left: 17px; font-size: 11px; color: var(--ai-muted); line-height: 1.75; }
+        .ai-card-action { margin-top: 7px; }
 
         #cmd-form {
             flex: none;
             display: flex;
-            gap: 8px;
-            padding: 10px 14px 12px;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 10px;
             border-top: 1px solid var(--ai-hairline);
             margin: 0;
         }
         #cmd-input {
             flex: 1;
             min-width: 0;
-            height: 30px;
-            background: oklch(0.14 0.015 236 / 0.8);
-            border: 1px solid var(--ai-border);
-            border-radius: 2px;
+            height: 28px;
+            background: rgba(10, 20, 28, 0.55);
+            border: 1px solid var(--ai-hairline);
+            border-radius: 999px;
             color: var(--ai-fg);
-            font-size: 13px;
+            font-size: 12px;
             padding: 0 10px;
             outline: none;
         }
-        #cmd-input:focus { border-color: oklch(0.60 0.07 200 / 0.6); }
-        #cmd-input::placeholder { color: var(--ai-faint); font-size: 12px; }
+        #cmd-input:focus { border-color: rgba(67, 201, 232, 0.5); }
+        #cmd-input::placeholder { color: rgba(127, 163, 181, 0.55); font-size: 11px; }
+        /* 发送：青色实心圆按钮（图标） */
         #cmd-send {
-            width: 52px;
-            height: 30px;
-            border-radius: 2px;
-            border: 1px solid oklch(0.60 0.07 200 / 0.6);
-            background: var(--ai-accent-dim);
-            color: var(--ai-accent);
-            font-size: 13px;
+            width: 28px;
+            height: 28px;
+            flex: none;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(145deg, #5fd6f0, #2fb3d4);
+            color: #052730;
             cursor: pointer;
-            letter-spacing: 0.06em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 1px 1px 0;
+            box-shadow: 0 2px 10px rgba(67, 201, 232, 0.35);
+            transition: filter 150ms ease, transform 150ms ease;
         }
-        #cmd-send:hover { filter: brightness(1.2); }
+        #cmd-send:hover { filter: brightness(1.12); transform: scale(1.08); }
+        /* 语音输入：按住说话（豆包 ASR） */
+        #cmd-mic {
+            width: 28px;
+            height: 28px;
+            flex: none;
+            border-radius: 50%;
+            border: 1px solid rgba(67, 201, 232, 0.45);
+            background: transparent;
+            color: #5fd6f0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 150ms ease, color 150ms ease;
+        }
+        #cmd-mic:hover { background: rgba(67, 201, 232, 0.12); }
+        #cmd-mic.recording {
+            background: #ff5d5d;
+            border-color: #ff5d5d;
+            color: #fff;
+            animation: mic-pulse 1s ease-in-out infinite;
+        }
+        #cmd-mic:disabled { opacity: 0.35; cursor: default; }
+        @keyframes mic-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 93, 93, 0.45); }
+            50% { box-shadow: 0 0 0 6px rgba(255, 93, 93, 0); }
+        }
 
         @media (max-width: 900px) {
-            #credits-footer { display: none; }
+            .assistant-panel { max-width: calc(100vw - 16px); }
         }
     </style>
 </head>
 <body>
     <div id="cesiumContainer"></div>
-
-    <div id="hud-panel" class="panel">
-        <div class="hud-header">
-            <span class="hud-title">巡界 XUNJIE · 风电工程场景（老鸦岭）</span>
-            <span class="badge badge-sim">SIMULATED 演示仿真</span>
-            <button id="windfield-toggle" class="hud-toggle" type="button" title="GPU 粒子风场流线开关">风场流线：开</button>
-        </div>
-        <div id="collider-status" class="hud-sub">碰撞：初始化中…</div>
-        <div id="engine-status" class="hud-sub hud-warn hud-hidden">引擎未连接（localhost:8787），仅可手动控制</div>
-        <div id="exec-status" class="hud-sub">执行器：待命（WASD 移动 / Shift 冲刺 / Space 跳跃 / F 飞行 / V 视角）</div>
-        <div class="hud-sub">指挥入口：右下角悬浮球 AI 面板 · 语音播报：浏览器本地 TTS</div>
-        <div id="cmd-log"></div>
-    </div>
-
-    <div id="asset-card" class="panel side-card" hidden>
-        <div class="side-card-head">
-            <span id="asset-title">风机信息</span>
-            <button id="asset-close" class="close-btn" title="关闭并恢复跟随视角">×</button>
-        </div>
-        <div id="asset-body" class="side-card-body"></div>
-    </div>
-
-    <div id="repair-record" class="panel side-card" hidden>
-        <div class="side-card-head">
-            <span>维修记录卡（可追溯回执）</span>
-            <button id="record-close" class="close-btn" title="关闭">×</button>
-        </div>
-        <div id="record-body" class="side-card-body"></div>
-    </div>
-
-    <div id="repair-panel" class="panel" hidden>
-        <div class="side-card-head">
-            <span id="repair-title">维修仿真进度</span>
-            <span id="repair-progress-text" class="mono"></span>
-        </div>
-        <div class="progress"><div id="repair-bar"></div></div>
-        <ol id="repair-steps"></ol>
-    </div>
-
-    <div id="credits-footer"></div>
 
     <a class="back-link" href="../">← 返回首页</a>
 
@@ -698,9 +569,8 @@
     <div class="assistant-shell" id="ai-shell" data-open="false">
         <section class="assistant-panel" id="ai-panel" aria-label="巡界 AI 助手">
             <header class="assistant-panel-head" id="ai-panel-head">
-                <i class="assistant-grip" aria-hidden="true"></i>
+                <span class="assistant-dot" aria-hidden="true"></span>
                 <span class="assistant-title">巡界 AI 助手</span>
-                <span class="assistant-context" id="ai-context" title="风电工程场景（老鸦岭）">风电工程场景</span>
                 <div class="assistant-head-actions">
                     <button type="button" class="assistant-head-btn" id="ai-tts"
                         aria-label="语音播报开关" title="语音播报：开（浏览器本地 TTS）" aria-pressed="true">
@@ -716,14 +586,24 @@
             <div class="assistant-msgs" id="ai-msgs"></div>
             <div class="assistant-quick" id="ai-quick">
                 <button type="button" data-q="飞到 7 号风机">飞到 7 号风机</button>
-                <button type="button" data-q="维修 7 号风机">维修 7 号风机</button>
                 <button type="button" data-q="查看 5 号风机">查看 5 号风机</button>
                 <button type="button" data-q="回运维点">回运维点</button>
             </div>
             <form id="cmd-form" autocomplete="off">
                 <input id="cmd-input" type="text" maxlength="1000"
                     placeholder="指挥数字运维员：导航 / 维修 / 查看…" />
-                <button id="cmd-send" type="submit">发送</button>
+                <button id="cmd-mic" type="button" aria-label="按住说话" title="按住说话（豆包语音识别）">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="9" y="3" width="6" height="12" rx="3" />
+                        <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7" />
+                    </svg>
+                </button>
+                <button id="cmd-send" type="submit" aria-label="发送">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M3.4 20.4 20.8 12.9c.8-.35.8-1.45 0-1.8L3.4 3.6c-.66-.29-1.39.2-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
+                    </svg>
+                </button>
             </form>
         </section>
         <button type="button" class="assistant-orb" id="ai-orb" aria-expanded="false" aria-label="打开巡界 AI 助手">

@@ -6,6 +6,7 @@ import { nowIsoShanghai } from '../util';
 import { createMission, handleSceneEvent, RuntimeHttpError, submitApproval, getMission, envelope } from './runtime';
 import { dispatchAvatarText } from './dispatch';
 import { SCENE_ID, SCENE_REVISION } from './context';
+import { doubaoAsrTranscribe, voiceConfigured } from './voice';
 import { AvatarClarificationError } from './avatar';
 import { interpretAvatar } from './avatar-llm';
 import { WIND_SCENE_ID, WIND_SCENE_REVISION } from './windFarm';
@@ -202,5 +203,32 @@ agentRoutes.post('/missions/:missionId/events', async (c) => {
     return c.json(envelope(res.mission, { extra: res.extra }));
   } catch (e) {
     return httpError(c, e);
+  }
+});
+
+// —— POST /api/agent/voice/asr：语音输入（豆包 Seed ASR，协议移植自 pipe-report-agent） ——
+// 前端采集 PCM 16k/16bit/mono 原始字节上传；返回识别文本，页面再用同一文字链路走 dispatch。
+// 未配置凭据（DOUBAO_ASR_RESOURCE_ID + 密钥）→ 503 VOICE_NOT_CONFIGURED，页面提示改用文字。
+agentRoutes.post('/voice/asr', async (c) => {
+  if (!voiceConfigured()) return err(c, 503, 'VOICE_NOT_CONFIGURED', '语音输入未配置（DOUBAO_ASR_RESOURCE_ID 与密钥），请使用文字指令');
+  const audio = Buffer.from(await c.req.arrayBuffer());
+  if (audio.length === 0) return err(c, 400, 'EMPTY_AUDIO', '未收到音频数据（PCM 16k/16bit/mono）');
+  const requestId = `VOICE-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    const text = await doubaoAsrTranscribe(audio, requestId);
+    return c.json({
+      status: 'available' as const,
+      data: { text },
+      sourceRefs: ['asr: doubao seed bigmodel（pipe-report-agent 协议移植）'],
+      truth: 'SIMULATED' as const,
+      observedAt: nowIsoShanghai(),
+      warnings: [],
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'ASR_FAILED';
+    if (message === 'ASR_TIMEOUT') return err(c, 504, 'ASR_TIMEOUT', '语音识别超时，请重试');
+    if (message === 'VOICE_NOT_CONFIGURED') return err(c, 503, 'VOICE_NOT_CONFIGURED', '语音输入未配置');
+    if (message.startsWith('ASR_HTTP_')) return err(c, 502, message, '语音服务连接失败');
+    return err(c, 502, 'ASR_FAILED', `语音识别失败：${message}`);
   }
 });

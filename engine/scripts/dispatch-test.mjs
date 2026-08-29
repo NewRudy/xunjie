@@ -12,6 +12,7 @@
 // 用法：node scripts/dispatch-test.mjs（自动拉起引擎实例，退出码 0=全绿）
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,10 +54,10 @@ async function req(port, method, p, body) {
 }
 const post = (port, p, body) => req(port, 'POST', p, body ?? {});
 
-function startEngine(port, dbFile) {
+function startEngine(port, dbFile, extraEnv = {}) {
   const child = spawn(process.execPath, [TSX, 'src/index.ts'], {
     cwd: ENGINE_DIR,
-    env: { ...process.env, PORT: String(port), PECC_DB: dbFile },
+    env: { ...process.env, PORT: String(port), PECC_DB: dbFile, ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stderr.on('data', (d) => process.env.AGENT_TEST_VERBOSE && process.stderr.write(d));
@@ -236,6 +237,50 @@ try {
 } finally {
   child.kill('SIGTERM');
   fs.rmSync(dbFile, { force: true });
+}
+
+// ---------- 10. 事实托底 LLM 兜底（独立引擎实例 + 本地 mock LLM） ----------
+section('事实托底 LLM 兜底（mock 凭据实例）');
+{
+  let llmMode = 'ok'; // ok | id-reply
+  const llmServer = http.createServer((req, res) => {
+    req.on('data', () => {});
+    req.on('end', () => {
+      const reply = llmMode === 'id-reply'
+        ? '7 号机（HS-WTG-07）需要优先处理。'
+        : '风速满足条件就可以安排作业，建议先关注状态预警的设备，必要时到现场核查。';
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ reply }) } }] }));
+    });
+  });
+  await new Promise((r) => llmServer.listen(0, '127.0.0.1', r));
+  const llmPort = llmServer.address().port;
+  const db2 = path.join(os.tmpdir(), `dispatch-test-llm-${process.pid}.db`);
+  const port2 = port + 1;
+  const child2 = startEngine(port2, db2, {
+    AGENT_LLM_API_KEY: 'mock-dispatch-key',
+    AGENT_LLM_BASE_URL: `http://127.0.0.1:${llmPort}/v1`,
+    AGENT_LLM_MODEL: 'mock-qa-model',
+  });
+  try {
+    ok(await waitHealth(port2), 'LLM 实例健康检查通过');
+    const dispatch2 = (text, extra = {}) => post(port2, '/api/agent/avatar/dispatch', { text, ...PECC, ...extra });
+
+    llmMode = 'ok';
+    const q1 = await dispatch2('今天适合作业吗', { conversationId: 'CONV-LLM' });
+    ok(q1.status === 200 && q1.json.data?.reply?.includes('安排作业'), '问句 → 事实托底回答', q1.json.data?.reply?.slice(0, 40));
+    ok(q1.json.data?.trace?.[0]?.detail === 'context-qa-llm', 'trace 标记 context-qa-llm', JSON.stringify(q1.json.data?.trace?.[0]));
+    ok(!/HS-WTG|CP-WT/.test(q1.json.data?.reply ?? ''), '托底回答不带 ID');
+    ok(q1.json.planner?.modelAvailable === true, 'planner 如实标注模型可用');
+
+    llmMode = 'id-reply';
+    const q2 = await dispatch2('风机叶片一般多长啊', { conversationId: 'CONV-LLM' });
+    ok(q2.status === 400 && q2.json.error?.code === 'CLARIFICATION_NEEDED' && String(q2.json.error?.message).includes('答不准'), '模型输出违规 → 回退软化澄清', String(q2.json.error?.message).slice(0, 40));
+  } finally {
+    child2.kill('SIGTERM');
+    llmServer.close();
+    fs.rmSync(db2, { force: true });
+  }
 }
 
 console.log(`\n========================================`);
