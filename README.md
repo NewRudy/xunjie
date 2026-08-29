@@ -97,9 +97,11 @@ pnpm dev
 
 ```bash
 cd engine
-pnpm test:avatar   # 当前 66/66
-pnpm test:avatar-llm # 当前 92/92（本地 mock，证明真实 HTTP 编排路径且不访问公网）
+pnpm test:avatar   # 当前 86/86
+pnpm test:avatar-llm # 当前 98/98（本地 mock，证明真实 HTTP 编排路径且不访问公网）
 pnpm test:model-gateway # 当前 32/32（结构化输出网关：JSON 提取/GLM 解包/修复重试/错误分级）
+pnpm test:dispatch # 当前 35/35（服务端编排：闭环命令、会话聚合、trace，拉起真实引擎）
+pnpm test:evals    # 当前 40/40（确定性路由评测：39 条固定语料 + 跨场景泄漏检查）
 pnpm test:agent    # 当前 72/72
 npx tsc --noEmit
 

@@ -118,9 +118,10 @@ agentRoutes.post('/avatar/dispatch', async (c) => {
       scene: AVATAR_SCENES[body.sceneId].scene,
       missionId: typeof body.missionId === 'string' && body.missionId ? body.missionId : undefined,
       reset: body.reset !== false,
+      conversationId: typeof body.conversationId === 'string' && body.conversationId ? body.conversationId : undefined,
     });
     if (res.kind === 'clarification') {
-      return err(c, 400, 'CLARIFICATION_NEEDED', res.clarification.message, { clarification: res.clarification, planner: res.planner });
+      return err(c, 400, 'CLARIFICATION_NEEDED', res.clarification.message, { clarification: res.clarification, planner: res.planner, conversationId: res.conversationId, trace: res.trace });
     }
     const missionEnvelope = res.mission ? envelope(res.mission) : null;
     return c.json({
@@ -131,6 +132,8 @@ agentRoutes.post('/avatar/dispatch', async (c) => {
         commands: res.commands,
         dispatch: res.outcomes,
         mission: missionEnvelope ? missionEnvelope.data : null,
+        conversationId: res.conversationId,
+        trace: res.trace,
       },
       sourceRefs: ['contracts/avatar-command.md', AVATAR_SCENES[body.sceneId].sourceRef, ...(res.mission ? [`/api/agent/missions/${res.mission.missionId}`] : [])],
       truth: 'SIMULATED' as const,

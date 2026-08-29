@@ -37,6 +37,39 @@ export function latestMissionId(): string | null {
   return row?.id ?? null;
 }
 
+// —— 会话轮次与 trace（P2：多轮上下文 + 可观测；只存结构化摘要，不存 prompt/模型原文） ——
+
+/** 一轮对话的结构化摘要（进 prompt 的只有这里允许的字段） */
+export interface AgentTurn {
+  text: string;
+  scene: string;
+  commands: Array<{ kind: string; targetId?: string }>;
+  missionId?: string;
+  outcomeSummary: string;
+  ts: string;
+}
+
+export function recordTurn(conversationId: string, turn: AgentTurn): void {
+  const seq = nextSeq(`turn:${conversationId}`);
+  db.prepare('INSERT OR REPLACE INTO agent_turns (conversation_id, seq, data, created_at) VALUES (?, ?, ?, ?)').run(
+    conversationId, seq, JSON.stringify(turn), nowIsoShanghai(),
+  );
+}
+
+/** 最近 N 轮摘要（按 seq 升序返回，供上下文注入；窗口有界防上下文膨胀） */
+export function recentTurns(conversationId: string, limit = 2): AgentTurn[] {
+  const rows = db
+    .prepare('SELECT data FROM agent_turns WHERE conversation_id = ? ORDER BY seq DESC LIMIT ?')
+    .all(conversationId, limit) as Array<{ data: string }>;
+  return rows.reverse().map((r) => JSON.parse(r.data) as AgentTurn);
+}
+
+export function recordTrace(id: string, conversationId: string, trace: unknown): void {
+  db.prepare('INSERT OR REPLACE INTO agent_trace (id, conversation_id, ts, data) VALUES (?, ?, ?, ?)').run(
+    id, conversationId, nowIsoShanghai(), JSON.stringify(trace),
+  );
+}
+
 // —— 事件幂等（scene-events.md §3：重复 eventId/idempotencyKey 不产生重复副作用） ——
 
 export interface EventRecord extends StoredSceneEvent {
@@ -71,9 +104,10 @@ export function nowEventTs(): string {
 
 // —— 演示复位：清空 agent 数据（/api/debug/reset 调用；不动气象缓存与标定） ——
 
-export function resetAgentData(): { missions: number; events: number } {
+export function resetAgentData(): { missions: number; events: number; turns: number } {
   const missions = (db.prepare('SELECT COUNT(*) AS n FROM agent_missions').get() as { n: number }).n;
   const events = (db.prepare('SELECT COUNT(*) AS n FROM agent_events').get() as { n: number }).n;
-  db.exec('DELETE FROM agent_missions; DELETE FROM agent_events;');
-  return { missions, events };
+  const turns = (db.prepare('SELECT COUNT(*) AS n FROM agent_turns').get() as { n: number }).n;
+  db.exec('DELETE FROM agent_missions; DELETE FROM agent_events; DELETE FROM agent_turns; DELETE FROM agent_trace;');
+  return { missions, events, turns };
 }

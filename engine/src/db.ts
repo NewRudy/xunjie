@@ -41,6 +41,19 @@ CREATE TABLE IF NOT EXISTS agent_events (
   mission_id TEXT NOT NULL,
   data TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agent_turns (
+  conversation_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  data TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (conversation_id, seq)
+);
+CREATE TABLE IF NOT EXISTS agent_trace (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  ts TEXT NOT NULL,
+  data TEXT NOT NULL
+);
 `);
 
 export function kvGet(key: string): string | null {

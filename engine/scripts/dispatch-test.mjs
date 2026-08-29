@@ -163,7 +163,22 @@ try {
     ok(r.status === 200 && r.json.data?.mission?.mission?.phase === 'cancelled', '驳回 → cancelled', r.json?.data?.mission?.mission?.phase);
   }
 
-  // ---------- 7. 风电场景 ----------
+  // ---------- 7. 会话与 trace（P2） ----------
+  section('会话聚合 + trace 上浮');
+  {
+    const r = await dispatch('检查 B2 屋顶异常', { conversationId: 'CONV-T2' });
+    ok(r.status === 200 && r.json.data?.conversationId === 'CONV-T2', '回显 conversationId', r.json.data?.conversationId);
+    const trace = r.json.data?.trace ?? [];
+    ok(Array.isArray(trace) && trace[0]?.label === '解释' && typeof trace[0]?.durationMs === 'number', 'trace 含解释节点与耗时', JSON.stringify(trace[0]));
+    ok(trace.some((s) => s.label === '执行:start_inspection' && s.status === 'ok'), 'trace 含闭环执行节点');
+    ok(trace[trace.length - 1]?.label === '总计', 'trace 以总计收尾');
+    const r2 = await dispatch('我同意', { conversationId: 'CONV-T2' });
+    ok(r2.status === 200 && r2.json.data?.conversationId === 'CONV-T2' && r2.json.data?.mission?.mission?.phase === 'executing', '同会话第二条指令 + trace 持续上浮', JSON.stringify(r2.json.data?.trace?.map((s) => s.label)));
+    const def = await dispatch('停下');
+    ok(def.json.data?.conversationId === 'CONV-DEMO', '缺省会话 CONV-DEMO', def.json.data?.conversationId);
+  }
+
+  // ---------- 8. 风电场景 ----------
   section('风电场景：闭环不可达（澄清）+ 场景命令透传');
   {
     const r = await post(port, '/api/agent/avatar/dispatch', { text: '我同意', ...WIND });

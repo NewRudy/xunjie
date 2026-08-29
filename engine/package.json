@@ -12,7 +12,8 @@
     "test:avatar": "tsx scripts/avatar-test.mjs",
     "test:avatar-llm": "tsx scripts/avatar-llm-test.mjs",
     "test:model-gateway": "tsx scripts/model-gateway-test.mjs",
-    "test:dispatch": "node scripts/dispatch-test.mjs"
+    "test:dispatch": "node scripts/dispatch-test.mjs",
+    "test:evals": "tsx scripts/agent-evals-test.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

@@ -93,11 +93,18 @@ export function validateLlmAvatarOutput(raw: unknown, scene: AvatarScene = 'pecc
 
 type LlmAttempt = { ok: true; commands: AvatarCommand[]; reply: string } | { ok: false; error: string };
 
-async function interpretViaLlm(rawText: string, scene: AvatarScene): Promise<LlmAttempt> {
+/** 注入 prompt 的历史轮次摘要（结构化、有界；来自 store.AgentTurn，不携带模型原文） */
+export interface AvatarTurnHint {
+  text: string;
+  commands: Array<{ kind: string; targetId?: string }>;
+}
+
+async function interpretViaLlm(rawText: string, scene: AvatarScene, history?: AvatarTurnHint[]): Promise<LlmAttempt> {
+  const userPayload = history?.length ? { text: normalizeAvatarText(rawText), recent: history } : { text: normalizeAvatarText(rawText) };
   const res = await structured<Record<string, unknown>>({
     messages: [
       { role: 'system', content: scene === 'wind' ? AVATAR_SYSTEM_PROMPT_WIND : AVATAR_SYSTEM_PROMPT_PECC },
-      { role: 'user', content: JSON.stringify({ text: normalizeAvatarText(rawText) }) },
+      { role: 'user', content: JSON.stringify(userPayload) },
     ],
     parse: (v) => (isPlainObject(v) ? v : null),
     validator: (v) => {
@@ -126,7 +133,7 @@ export interface AvatarOutcome {
 
 const DETERMINISTIC_PLANNER: PlannerInfo = { mode: 'deterministic-fallback', modelAvailable: false, reason: 'NO_CREDENTIALS' };
 
-export async function interpretAvatar(rawText: string, scene: AvatarScene = 'pecc'): Promise<AvatarOutcome> {
+export async function interpretAvatar(rawText: string, scene: AvatarScene = 'pecc', history?: AvatarTurnHint[]): Promise<AvatarOutcome> {
   const normalizedText = normalizeAvatarText(rawText);
 
   // 无凭据：完全保持既有确定性行为，绝不外呼
@@ -140,7 +147,7 @@ export async function interpretAvatar(rawText: string, scene: AvatarScene = 'pec
     }
   }
 
-  const llm = await interpretViaLlm(rawText, scene);
+  const llm = await interpretViaLlm(rawText, scene, history);
   if (llm.ok) {
     return { normalizedText, reply: llm.reply, commands: llm.commands, planner: { mode: 'llm', modelAvailable: true } };
   }
