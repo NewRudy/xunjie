@@ -77,6 +77,8 @@ interface InterpretResponse {
         mission?: MissionBrief | null;
         conversationId?: string;
         trace?: TraceStep[];
+        /** 问答类响应标记（identity/scene/mission/object/facts-qa）：语音播报只对这类回复开启 */
+        sceneBrief?: Record<string, unknown>;
     };
     planner?: { mode?: "llm" | "deterministic-fallback"; modelAvailable?: boolean; reason?: string };
     truth?: string;
@@ -587,6 +589,7 @@ async function main() {
 
     const zeroInput = () => player.setInput({ moveX: 0, moveY: 0, jump: false, shift: false });
     const playerLocal = () => worldToLocal(player.getPosition());
+    (window as unknown as { __probe?: () => Cartesian3 }).__probe = () => playerLocal(); // TEMP-PROBE（验证后删除）
 
     function faceTowards(de: number, dn: number, dt: number) {
         if (Math.hypot(de, dn) < 1) return;
@@ -1277,7 +1280,8 @@ async function main() {
             trace: body.data?.trace,
             warnings: body.warnings,
         });
-        if (body.data?.reply) speak(body.data.reply);
+        // 播报规则：问业务/场景上下文（sceneBrief 存在）→ 语音播报；操作数字人的执行确认 → 静默（面板已反馈）
+        if (body.data?.sceneBrief && body.data.reply) speak(body.data.reply);
         if (commands.length) executor.push(commands);
     }
 

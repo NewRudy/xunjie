@@ -246,10 +246,12 @@ function answerContextQuestion(text: string, pkg: ScenePackage, scene: 'pecc' | 
   if (MISSION_QA_RE.test(text)) {
     const id = latestMissionId();
     const m = id ? loadMission(id) : null;
+    const phaseText = m ? humanPhase(m.phase) : '';
+    const approvalLine = m?.pendingApproval && !phaseText.includes('等你')
+      ? (m.pendingApproval.purpose === 'close' ? '证据已经齐了，就等你一句「我同意」确认闭环。' : '有一份处理建议正等你批准。')
+      : '';
     return {
-      reply: m
-        ? `${missionHumanLine()}${m.pendingApproval ? (m.pendingApproval.purpose === 'close' ? '证据已经齐了，就等你一句「我同意」确认闭环。' : '有一份处理建议正等你批准。') : ''}`
-        : '当前没有进行中的任务。说「检查 B2 屋顶异常」就能建一个巡检任务（光伏场景）。',
+      reply: m ? `${missionHumanLine()}${approvalLine}` : '当前没有进行中的任务。说「检查 B2 屋顶异常」就能建一个巡检任务（光伏场景）。',
       brief: { kind: 'mission', sceneId: meta.sceneId, missionId: m?.missionId ?? null, phase: m?.phase ?? null, inspectionTaskId: m?.inspectionTaskId ?? null },
     };
   }
