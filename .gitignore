@@ -8,3 +8,8 @@ dist/
 *.local
 .windops/
 coverage/
+
+# player-demo 大体积二进制资产不入库（本地保留；来源与恢复方式见 player-demo/UPSTREAM.md）
+player-demo/example/public/cesium/
+player-demo/example/public/glb/
+player-demo/example/public/wind/assets/
