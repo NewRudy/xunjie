@@ -1,14 +1,14 @@
 // 数字现场仿真执行器（明确标注“数字现场/仿真动作”，无真实机器人接入）。
 // 消费高层命令 navigate_to_checkpoint：数字运维人员沿 fixture 登记道路折线
 // 移动到检查点，真正到达后才由 bridge 发送 checkpoint_arrived。
-// 人物本体由 AvatarActor（本地 GLB 数字运维员）承载；纯 avatar 控制可传
+// 人物本体由 cesium-player-controller 适配器承载；纯 avatar 控制可传
 // reportMissionEvent: false，此时只移动人物，不伪造任何 mission 到达事件。
 import * as Cesium from 'cesium'
 import { fixture, type Vec3 } from '../fixture'
 import { planRoute } from './router'
 import { emitCheckpointArrived, emitNavigationFailed } from './bridge'
 import { log, missionStore } from './missionStore'
-import { AvatarActor, RUN_SPEED_MPS } from './avatar'
+import { RUN_SPEED_MPS, type AvatarMotionController } from './avatar'
 
 const checkpointById = new Map(fixture.checkpoints.map((c) => [c.id, c]))
 
@@ -20,7 +20,7 @@ export interface NavigateOptions {
 export class PatrolExecutor {
   constructor(
     private viewer: Cesium.Viewer,
-    private actor: AvatarActor,
+    private actor: AvatarMotionController,
   ) {}
 
   /** 中断当前移动（拒绝/新任务时调用）；不发送到达事件 */

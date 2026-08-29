@@ -14,7 +14,7 @@ import {
   FLY_SPEED_MPS,
   RUN_SPEED_MPS,
   WALK_SPEED_MPS,
-  type AvatarActor,
+  type AvatarMotionController,
 } from './avatar'
 import { log } from './missionStore'
 import type { AvatarCommand, AvatarMovement } from './types'
@@ -44,7 +44,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** 导航到登记目标：walk/run 沿登记道路；fly 先抬升到巡航高度再平飞、到位后下降 */
-async function navigateAvatar(actor: AvatarActor, targetId: string, movement: AvatarMovement): Promise<void> {
+async function navigateAvatar(actor: AvatarMotionController, targetId: string, movement: AvatarMovement): Promise<void> {
   const target = NAV_TARGETS.get(targetId)
   if (!target) {
     log(`导航取消：${targetId} 未在合同登记目标内`)
@@ -75,7 +75,7 @@ async function navigateAvatar(actor: AvatarActor, targetId: string, movement: Av
 }
 
 /** 合同 §3：up/down 必须使用 fly */
-function relativeDelta(actor: AvatarActor, direction: string, dist: number): Vec3 {
+function relativeDelta(actor: AvatarMotionController, direction: string, dist: number): Vec3 {
   const rad = (actor.headingDeg * Math.PI) / 180
   const fx = Math.cos(rad)
   const fy = Math.sin(rad)
@@ -175,7 +175,7 @@ function explodedView(viewer: Cesium.Viewer, anchor: Vec3): () => void {
  */
 async function repairSimulation(
   viewer: Cesium.Viewer,
-  actor: AvatarActor,
+  actor: AvatarMotionController,
   targetId: string,
   checkpointId: string,
 ): Promise<void> {
@@ -257,7 +257,7 @@ async function repairSimulation(
 /** 依序执行后端签发的受控命令；新一批命令进入前由调用方先打断旧动作 */
 export async function executeAvatarCommands(
   viewer: Cesium.Viewer,
-  actor: AvatarActor,
+  actor: AvatarMotionController,
   commands: AvatarCommand[],
 ): Promise<void> {
   for (const cmd of commands) {

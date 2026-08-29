@@ -2,6 +2,8 @@
 // 确定性中文解析，不依赖 LLM/密钥；只输出合同受控命令集合，绝不生成脚本、Cesium API 或未登记坐标。
 // 本模块为纯函数（无 IO、无状态副作用，除响应内 commandId 序号外），Demo 稳定性优先。
 
+import type { PlannerInfo } from './types';
+
 // —— 受控命令集合（contracts/avatar-command.md §3） ——
 
 export type AvatarMovement = 'walk' | 'run' | 'fly';
@@ -27,7 +29,7 @@ export interface AvatarInterpretation {
 
 /** Omit 对联合类型分发，保留每个分支的形状 */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-type AvatarCommandInput = DistributiveOmit<AvatarCommand, 'commandId'>;
+export type AvatarCommandInput = DistributiveOmit<AvatarCommand, 'commandId'>;
 
 /** 统一告警：仅数字现场仿真，不控制真实设备（合同 §2） */
 export const AVATAR_WARNINGS = [
@@ -55,9 +57,14 @@ export const AVATAR_EXAMPLES = [
 // —— 澄清错误（路由层映射 400 CLARIFICATION_NEEDED，不猜目标） ——
 
 export class AvatarClarificationError extends Error {
-  constructor(message: string, public readonly examples: string[] = AVATAR_EXAMPLES) {
+  constructor(message: string, public readonly examples: string[] = AVATAR_EXAMPLES, public readonly planner?: PlannerInfo) {
     super(message);
     this.name = 'AvatarClarificationError';
+  }
+
+  /** 回退/编排层携带本轮解释来源信息（planner 只含错误类型，不含密钥/请求体） */
+  withPlanner(planner: PlannerInfo): AvatarClarificationError {
+    return new AvatarClarificationError(this.message, this.examples, planner);
   }
 }
 
@@ -74,11 +81,11 @@ export function normalizeAvatarText(raw: string): string {
 // —— 距离/角度钳制（合同 §3：distance 1..50，degrees -180..180） ——
 
 const clampNum = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x));
-const DIST_MIN = 1;
-const DIST_MAX = 50;
+export const DIST_MIN = 1;
+export const DIST_MAX = 50;
 const DIST_DEFAULT = 10;
-const DEG_MIN = -180;
-const DEG_MAX = 180;
+export const DEG_MIN = -180;
+export const DEG_MAX = 180;
 
 // —— 简式中文数字（一~九十九，距离/角度用）：十→10、十五→15、二十五→25 ——
 
@@ -143,7 +150,7 @@ const MOVE_VERB: Record<AvatarMovement, string> = { walk: '步行', run: '跑步
 
 let interpretSeq = 0;
 
-function withIds(commands: AvatarCommandInput[]): AvatarCommand[] {
+export function withIds(commands: AvatarCommandInput[]): AvatarCommand[] {
   const batch = ++interpretSeq;
   return commands.map((c, i) => ({ ...c, commandId: `avatar-${batch}-${i + 1}` }) as AvatarCommand);
 }
@@ -310,7 +317,7 @@ export function interpretAvatarCommand(rawText: string): AvatarInterpretation {
   return { normalizedText, reply: buildReply(commands), commands };
 }
 
-function buildReply(commands: AvatarCommand[]): string {
+export function buildReply(commands: AvatarCommand[]): string {
   const last = commands[commands.length - 1];
   switch (last.kind) {
     case 'navigate':

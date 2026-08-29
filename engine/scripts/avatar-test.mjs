@@ -29,6 +29,9 @@ function section(title) {
 
 const { parseAvatarCommand, interpretAvatarCommand, AvatarClarificationError, AVATAR_WARNINGS } = await import('../src/agent/avatar.ts');
 
+// Hermetic 守卫：本测试锁定「无凭据 → 确定性解析」行为；若 shell 带 LLM 凭据会让路由真实外呼，先清掉
+for (const k of ['AGENT_LLM_API_KEY', 'AGENT_LLM_BASE_URL', 'AGENT_LLM_MODEL']) delete process.env[k];
+
 // 路由冒烟：临时 SQLite（导入链含 db 初始化，PECC_DB 须在动态 import 前设置）
 const tmpDb = path.join(os.tmpdir(), `avatar-route-test-${process.pid}.db`);
 process.env.PECC_DB = tmpDb;

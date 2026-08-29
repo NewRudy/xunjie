@@ -52,6 +52,20 @@ const PHASE_LABEL: Record<string, string> = {
 const engineLabel = computed(() =>
   missionStore.engine === 'online' ? '引擎在线' : missionStore.engine === 'offline' ? '引擎离线' : '引擎状态未知',
 )
+const avatarControllerLabel = computed(() =>
+  avatarStore.controllerMode === 'cesium-player-controller'
+    ? '人物执行器：cesium-player-controller'
+    : avatarStore.controllerMode === 'loading'
+      ? '人物执行器：加载中'
+      : '人物执行器：不可用',
+)
+const avatarPlannerLabel = computed(() =>
+  avatarStore.interpretPlanner?.mode === 'llm'
+    ? '本轮理解：大模型'
+    : avatarStore.interpretPlanner?.mode === 'deterministic-fallback'
+      ? '本轮理解：确定性回退'
+      : '本轮理解：尚未发送',
+)
 
 /** 四类高信号研判卡：按后端 context 的 scope 分组，不硬编码业务数字 */
 const SIGNAL_GROUPS: Array<{ title: string; scopes: ContextItem['scope'][] }> = [
@@ -124,7 +138,7 @@ function submit(): void {
 
       <section class="avatar">
         <div class="sec-title">
-          数字运维员（仿真）
+          文字控制数字运维员（仿真）
           <em class="motion" :data-m="avatarStore.motion">{{ avatarStore.motion }}</em>
         </div>
         <div class="btn-row presets">
@@ -135,22 +149,38 @@ function submit(): void {
         <input
           v-model="avatarText"
           class="avatar-input"
-          placeholder="对数字运维员说话，例如：向前跑 10 米 / 回运维点"
+          placeholder="输入任务，例如：飞到 B2 逆变器维修 7 号异常组串"
           @keydown.enter.exact.prevent="sendAvatar(avatarText)"
         />
-        <div class="btn-row voice-row">
-          <button
-            class="voice-btn"
-            :class="{ live: voiceStore.status === 'listening' || voiceStore.status === 'recognizing' }"
-            :disabled="voiceStore.status === 'unsupported'"
-            @click="toggleVoice"
-          >
-            {{ voiceStore.status === 'listening' || voiceStore.status === 'recognizing' ? '停止语音' : '开始语音' }}
-          </button>
-          <span class="voice-status" :data-s="voiceStore.status">{{ voiceStatusLabel() }}</span>
+        <div class="avatar-runtime">
+          <span>{{ avatarControllerLabel }}</span>
+          <span :class="{ fallback: avatarStore.interpretPlanner?.mode === 'deterministic-fallback' }">
+            {{ avatarPlannerLabel }}
+          </span>
         </div>
-        <div v-if="voiceStore.transcript" class="kv cmds">最终转写：{{ voiceStore.transcript }}</div>
-        <div v-if="voiceStore.error" class="error">{{ voiceStore.error }}</div>
+        <div class="runtime-note">{{ avatarStore.collisionNote }}</div>
+        <div v-if="avatarStore.interpretPlanner?.reason" class="runtime-note">
+          回退原因：{{ avatarStore.interpretPlanner.reason }}
+        </div>
+        <div v-if="avatarStore.controllerError" class="error">
+          人物执行器：{{ avatarStore.controllerError }}
+        </div>
+        <details class="voice-later">
+          <summary>语音输入（后续能力）</summary>
+          <div class="btn-row voice-row">
+            <button
+              class="voice-btn"
+              :class="{ live: voiceStore.status === 'listening' || voiceStore.status === 'recognizing' }"
+              :disabled="voiceStore.status === 'unsupported'"
+              @click="toggleVoice"
+            >
+              {{ voiceStore.status === 'listening' || voiceStore.status === 'recognizing' ? '停止语音' : '开始语音' }}
+            </button>
+            <span class="voice-status" :data-s="voiceStore.status">{{ voiceStatusLabel() }}</span>
+          </div>
+          <div v-if="voiceStore.transcript" class="kv cmds">最终转写：{{ voiceStore.transcript }}</div>
+          <div v-if="voiceStore.error" class="error">{{ voiceStore.error }}</div>
+        </details>
         <div v-if="avatarStore.reply" class="kv reply">后端回复：{{ avatarStore.reply }}</div>
         <div v-if="avatarStore.lastCommands.length" class="kv cmds">
           命令：{{ avatarStore.lastCommands.join('；') }}
@@ -387,6 +417,36 @@ button.preset {
   padding: 7px 8px;
   font-size: 12px;
   font-family: inherit;
+}
+.avatar-runtime {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 10px;
+  color: #81c784;
+}
+.avatar-runtime span {
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(76, 175, 80, 0.12);
+}
+.avatar-runtime span.fallback {
+  color: #f9a825;
+  background: rgba(249, 168, 37, 0.12);
+}
+.runtime-note {
+  margin-top: 5px;
+  font-size: 10px;
+  color: #8fa3b5;
+}
+.voice-later {
+  margin-top: 7px;
+  color: #8fa3b5;
+  font-size: 11px;
+}
+.voice-later summary {
+  cursor: pointer;
 }
 .reply {
   color: #00e5ff;

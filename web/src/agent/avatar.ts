@@ -1,63 +1,68 @@
-// 数字运维员（仿真角色）：本地 GLB 人物模型 + 受控运动原语。
-// 只消费 contracts/avatar-command.md 登记的命令；所有运动为数字现场仿真，
-// 不连接任何真实设备。模型资产已本地化到 web/public/vendor（见该目录 NOTICE.md）。
-//
-// 预留 controller adapter 接口：后续若接入 cesium-player-controller（物理碰撞版），
-// 实现同一 AvatarMotionController 接口即可替换 AvatarActor，上层命令执行不变。
+// 巡界数字运维员执行层：cesium-player-controller 可见人物 + 受控高层动作。
+// 业务层只依赖 AvatarMotionController；人物包不理解任务、审批或设备状态。
+// 登记路线仍由确定性插值保证 Demo 稳定，人物渲染、动画、视角、输入与基础胶囊体由上游包承担。
 import * as Cesium from 'cesium'
+import { playerController } from 'cesium-player-controller'
 import { reactive } from 'vue'
 import { fixture, type Vec3 } from '../fixture'
 import { enuToWorld } from '../cesium/coords'
 import { log } from './missionStore'
+import type { AvatarInterpretPlanner } from './types'
 
-/** 数字现场演示速度档（m/s，非业务数字；走/跑/飞有明显区分） */
+/** 数字现场演示速度档（m/s，非业务数字） */
 export const WALK_SPEED_MPS = 5
 export const RUN_SPEED_MPS = 18
 export const FLY_SPEED_MPS = 14
-/** 飞行巡航高度（仿真动作，可见抬升轨迹） */
 export const FLY_CRUISE_ALT_M = 18
 
-export type AvatarMotion = 'IDLE' | 'WALK' | 'RUN' | 'FLY' | 'JUMP' | 'REPAIR'
+/** UAL1 模型缩放 0.01 后的胶囊中心离脚底约 1.1m。 */
+const CAPSULE_CENTER_M = 1.1
+const MODEL_URI = '/vendor/models/XunjieOperator.glb'
 
-/** 面板可见的数字人状态（纯前端展示，不写入 MissionState） */
+export type AvatarMotion = 'IDLE' | 'WALK' | 'RUN' | 'FLY' | 'JUMP' | 'REPAIR'
+/** 面板可见状态；不写 MissionState。 */
 export const avatarStore = reactive({
   motion: 'IDLE' as AvatarMotion,
-  /** 后端 interpret 回复原文 */
   reply: '',
   lastText: '',
-  /** 本轮消费的后端命令摘要（kind + target） */
   lastCommands: [] as string[],
   error: '',
-  /** 维修仿真进度；null 表示无维修仿真进行中 */
   repair: null as { targetId: string; phase: string; progress: number } | null,
+  controllerMode: 'loading' as 'loading' | 'cesium-player-controller' | 'unavailable',
+  controllerError: '',
+  collisionNote: '最小本地平面碰撞；未接 3D Tiles 工程碰撞体',
+  interpretPlanner: null as AvatarInterpretPlanner | null,
 })
 
-/**
- * 数字人控制器接口（adapter 预留）：命令执行层只依赖本接口，
- * 后续可替换为基于 cesium-player-controller 的物理碰撞实现。
- */
 export interface AvatarMotionController {
   readonly pos: Vec3
   readonly headingDeg: number
-  /** 立即停止当前运动，状态回到 IDLE */
   stop(): void
-  /** 沿 ENU 折线以指定速度与状态标签移动，到达或被打断后 resolve */
   travel(waypoints: Vec3[], speedMps: number, motion: 'WALK' | 'RUN' | 'FLY'): Promise<void>
   jump(): Promise<void>
   turn(degrees: number): Promise<void>
 }
 
-const MODEL_URI = 'vendor/models/CesiumMan.glb'
-
-export class AvatarActor implements AvatarMotionController {
-  private entity: Cesium.Entity | null = null
+/**
+ * 上游包适配器。
+ *
+ * 为保证比赛现场路径稳定，travel 继续按登记折线计算 ENU 插值，再通过 player.reset
+ * 同步包内胶囊体/可见模型；setInput 驱动包内动作状态。未实现完整建筑/3D Tiles 碰撞。
+ */
+export class CpcAvatarActor implements AvatarMotionController {
+  private player: playerController | null = null
+  private readyPromise: Promise<void> | null = null
   private tickRemove: (() => void) | null = null
-  /** 打断代际：每次新动作 +1，旧 tick 发现代际过期即自行退出 */
+  private tickResolve: (() => void) | null = null
+  private updateRemove: (() => void) | null = null
+  private labelEntity: Cesium.Entity | null = null
   private generation = 0
   private _pos: Vec3 = [...fixture.opsPoint.position]
   private _headingDeg = 0
 
-  constructor(private viewer: Cesium.Viewer) {}
+  constructor(private viewer: Cesium.Viewer) {
+    this.ensureLabel()
+  }
 
   get pos(): Vec3 {
     return [...this._pos] as Vec3
@@ -67,28 +72,89 @@ export class AvatarActor implements AvatarMotionController {
     return this._headingDeg
   }
 
-  /** 创建人物实体（本地 GLB）；加载失败时退化为原有光点标记，不阻塞演示 */
-  ensureEntity(): Cesium.Entity {
-    if (this.entity) return this.entity
-    const position = new Cesium.ConstantPositionProperty(enuToWorld(this._pos[0], this._pos[1], this._pos[2]))
-    this.entity = this.viewer.entities.add({
-      position,
-      orientation: new Cesium.ConstantProperty(this.orientation()),
-      // 第三人称展演视距：既能看清人物，也保留周围厂房/道路作为工程语境。
-      viewFrom: new Cesium.Cartesian3(-24, -24, 14),
-      model: {
-        uri: MODEL_URI,
-        scale: 3,
-        minimumPixelSize: 48,
-        runAnimations: true,
-        clampAnimations: false,
-      },
-      // 光点兜底：若 GLB 因任何原因未渲染，仍有一个可见标记
-      point: {
-        pixelSize: 4,
-        color: Cesium.Color.fromCssColorString('#00e5ff').withAlpha(0.6),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      },
+  /** 幂等异步初始化；失败会明确进入 unavailable，所有动作保持拒绝执行。 */
+  init(): Promise<void> {
+    if (!this.readyPromise) this.readyPromise = this.initialize()
+    return this.readyPromise
+  }
+
+  private async initialize(): Promise<void> {
+    avatarStore.controllerMode = 'loading'
+    avatarStore.controllerError = ''
+    try {
+      const player = new playerController()
+      await player.init({
+        viewer: this.viewer,
+        initPos: this.worldPosition(),
+        playerModelConfig: {
+          url: MODEL_URI,
+          scale: 0.01,
+          idleAnim: 'Idle_Loop',
+          walkAnim: 'Walk_Loop',
+          runAnim: 'Sprint_Loop',
+          jumpAnim: ['Jump_Start', 'Jump_Loop', 'Jump_Land'],
+          flyAnim: 'fly',
+          flyIdleAnim: 'flyIdle',
+          flyHoverForwardAnim: 'flyHoverForward',
+          flyHoverBackAnim: 'flyHoverBack',
+          flyHoverLeftAnim: 'flyHoverLeft',
+          flyHoverRightAnim: 'flyHoverRight',
+          flyHoverUpAnim: 'flyHoverUp',
+          flyHoverDownAnim: 'flyHoverDown',
+          rotateY: -Math.PI / 2,
+          facingOffset: Math.PI / 2,
+        },
+        minCamDistance: 1000,
+        maxCamDistance: 4500,
+        camLookAtHeightRatio: 0.72,
+        thirdMouseMode: 3,
+        enableZoom: true,
+        enableSpringCamera: true,
+        springCameraTime: 0.08,
+        isShowMobileControls: false,
+        // 文字对话是主入口；禁用全局键位可避免在输入框打字时误移动人物。
+        keyMap: {
+          forward: null,
+          backward: null,
+          left: null,
+          right: null,
+          sprint: null,
+          jump: null,
+          toggleView: null,
+          toggleFly: null,
+          toggleVehicle: null,
+        },
+      })
+
+      // 使用上游公开碰撞接口加载本地 z=0 平面；不访问 Rapier 私有字段。
+      // 这是 Demo 最小碰撞，不代表厂房、屋面或 3D Tiles 工程碰撞已接入。
+      await player.physics.addStaticColliders(this.viewer, {
+        type: 'gltf',
+        url: '/vendor/models/XunjieGroundCollider.gltf',
+        position: enuToWorld(0, 0, 0),
+      })
+
+      this.player = player
+      this.updateRemove = this.viewer.scene.preUpdate.addEventListener(() => {
+        this.player?.update()
+        this.applyHeading()
+      })
+      avatarStore.controllerMode = 'cesium-player-controller'
+      avatarStore.collisionNote = '最小本地平面碰撞；未接屋面/建筑/3D Tiles 工程碰撞体'
+      this.applyPlayerPose('IDLE')
+      log('人物执行器已就绪：cesium-player-controller 0.2.0（最小本地平面碰撞）')
+    } catch (error) {
+      avatarStore.controllerMode = 'unavailable'
+      avatarStore.controllerError = error instanceof Error ? error.message : String(error)
+      avatarStore.error = `人物控制器初始化失败：${avatarStore.controllerError}`
+      log(avatarStore.error)
+      throw error
+    }
+  }
+
+  private ensureLabel(): void {
+    this.labelEntity = this.viewer.entities.add({
+      position: new Cesium.CallbackPositionProperty(() => this.worldPosition(), false),
       label: {
         text: new Cesium.CallbackProperty(() => `数字运维员（仿真）· ${avatarStore.motion}`, false),
         font: '12px "PingFang SC", "Microsoft YaHei", sans-serif',
@@ -96,81 +162,108 @@ export class AvatarActor implements AvatarMotionController {
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 3,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset: new Cesium.Cartesian2(0, -30),
+        pixelOffset: new Cesium.Cartesian2(0, -34),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
     })
-    return this.entity
   }
 
-  private orientation(): Cesium.Quaternion {
-    // CesiumMan 模型前向为 +Z，绕 Z 轴额外转 -90° 使其朝向 heading 方向
-    const heading = Cesium.Math.toRadians(this._headingDeg - 90)
-    return Cesium.Transforms.headingPitchRollQuaternion(
-      enuToWorld(this._pos[0], this._pos[1], this._pos[2]),
-      new Cesium.HeadingPitchRoll(heading, 0, 0),
-    )
+  private worldPosition(): Cesium.Cartesian3 {
+    return enuToWorld(this._pos[0], this._pos[1], this._pos[2] + CAPSULE_CENTER_M)
   }
 
-  private applyPose(): void {
-    if (!this.entity) return
-    this.entity.position = new Cesium.ConstantPositionProperty(
-      enuToWorld(this._pos[0], this._pos[1], this._pos[2]),
-    )
-    this.entity.orientation = new Cesium.ConstantProperty(this.orientation())
+  private async ready(): Promise<boolean> {
+    try {
+      await this.init()
+      return Boolean(this.player) && avatarStore.controllerMode === 'cesium-player-controller'
+    } catch {
+      return false
+    }
+  }
+
+  private applyHeading(): void {
+    if (!this.player) return
+    // 业务 heading: 0°=东、90°=北；上游 yaw: 0=北、+90°=东。
+    const targetYaw = Math.PI / 2 - Cesium.Math.toRadians(this._headingDeg)
+    const delta = Cesium.Math.negativePiToPi(targetYaw - this.player.getYaw())
+    this.player.addYaw(delta)
+  }
+
+  private setFlying(shouldFly: boolean): void {
+    if (!this.player || this.player.getIsFlying() === shouldFly) return
+    this.player.setInput({ toggleFly: true })
+  }
+
+  private applyPlayerPose(motion: AvatarMotion): void {
+    if (!this.player) return
+    this.player.reset(this.worldPosition())
+    this.setFlying(motion === 'FLY' || this._pos[2] > 0.5)
+    const moving = motion === 'WALK' || motion === 'RUN' || motion === 'FLY'
+    this.player.setInput({
+      moveX: 0,
+      moveY: moving ? 1 : 0,
+      jump: false,
+      shift: motion === 'RUN',
+    })
+    this.applyHeading()
   }
 
   stop(): void {
     this.generation += 1
-    if (this.tickRemove) {
-      this.tickRemove()
-      this.tickRemove = null
-    }
+    this.tickRemove?.()
+    this.tickRemove = null
+    this.tickResolve?.()
+    this.tickResolve = null
+    this.player?.setInput({ moveX: 0, moveY: 0, jump: false, shift: false })
     if (avatarStore.motion !== 'REPAIR') avatarStore.motion = 'IDLE'
+    this.applyPlayerPose('IDLE')
   }
 
-  /** 演示复位：回运维点、停止跟随与维修特效，保证每次演示从统一位置开始 */
   resetToOpsPoint(): void {
     if (avatarStore.motion === 'REPAIR') avatarStore.motion = 'IDLE'
     this.stop()
     this._pos = [...fixture.opsPoint.position]
     this._headingDeg = 0
     avatarStore.repair = null
-    if (this.viewer.trackedEntity === this.entity) this.viewer.trackedEntity = undefined
-    this.applyPose()
+    void this.ready().then((ok) => {
+      if (ok) this.applyPlayerPose('IDLE')
+    })
   }
 
-  /** 通用插值移动：travel/jump/turn 共用的逐帧驱动；被打断时静默 resolve */
-  private drive(
-    durationHint: (dt: number, t: number) => { done: boolean },
+  private async drive(
+    update: (dt: number, elapsed: number) => { done: boolean },
     motion: AvatarMotion,
   ): Promise<void> {
+    if (!(await this.ready())) return
     this.stop()
     const gen = this.generation
     avatarStore.motion = motion
-    this.ensureEntity()
-    return new Promise((resolve) => {
+    this.applyPlayerPose(motion)
+    await new Promise<void>((resolve) => {
+      this.tickResolve = resolve
       let lastTs: number | null = null
-      let t = 0
+      let elapsed = 0
       const finish = (): void => {
         if (this.generation === gen) {
           this.tickRemove = null
+          this.tickResolve = null
           if (avatarStore.motion === motion) avatarStore.motion = 'IDLE'
+          this.applyPlayerPose('IDLE')
         }
         resolve()
       }
       const onTick = (): void => {
         if (this.generation !== gen) {
-          // 已被新动作打断；新动作已接管 tick
+          this.tickResolve = null
           resolve()
           return
         }
         const now = performance.now()
         const dt = lastTs === null ? 0 : Math.min((now - lastTs) / 1000, 0.1)
         lastTs = now
-        t += dt
-        const { done } = durationHint(dt, t)
-        this.applyPose()
+        elapsed += dt
+        const { done } = update(dt, elapsed)
+        this.applyPlayerPose(motion)
         if (done) {
           this.viewer.clock.onTick.removeEventListener(onTick)
           finish()
@@ -181,27 +274,24 @@ export class AvatarActor implements AvatarMotionController {
     })
   }
 
-  travel(waypoints: Vec3[], speedMps: number, motion: 'WALK' | 'RUN' | 'FLY'): Promise<void> {
-    if (waypoints.length < 2) return Promise.resolve()
-    // 展演默认跟随数字人，确保观众能看见人物动作；维修阶段会切回设备聚焦。
-    this.viewer.trackedEntity = this.ensureEntity()
+  async travel(waypoints: Vec3[], speedMps: number, motion: 'WALK' | 'RUN' | 'FLY'): Promise<void> {
+    if (waypoints.length < 2) return
     const segLen: number[] = []
     let total = 0
     for (let i = 0; i < waypoints.length - 1; i++) {
-      const l = Math.hypot(
+      const len = Math.hypot(
         waypoints[i + 1][0] - waypoints[i][0],
         waypoints[i + 1][1] - waypoints[i][1],
         waypoints[i + 1][2] - waypoints[i][2],
       )
-      segLen.push(l)
-      total += l
+      segLen.push(len)
+      total += len
     }
     let travelled = 0
-    return this.drive((dt) => {
+    await this.drive((dt) => {
       travelled += dt * speedMps
       if (travelled >= total) {
-        const end = waypoints[waypoints.length - 1]
-        this._pos = [...end] as Vec3
+        this._pos = [...waypoints[waypoints.length - 1]] as Vec3
         return { done: true }
       }
       let acc = 0
@@ -222,13 +312,13 @@ export class AvatarActor implements AvatarMotionController {
     }, motion)
   }
 
-  jump(): Promise<void> {
+  async jump(): Promise<void> {
+    if (!(await this.ready())) return
+    this.player?.setInput({ jump: true })
     const baseZ = this._pos[2]
-    const DURATION_S = 0.9
-    const HEIGHT_M = 1.6
-    return this.drive((_dt, t) => {
-      const k = Math.min(t / DURATION_S, 1)
-      this._pos = [this._pos[0], this._pos[1], baseZ + Math.sin(k * Math.PI) * HEIGHT_M]
+    await this.drive((_dt, elapsed) => {
+      const k = Math.min(elapsed / 0.9, 1)
+      this._pos = [this._pos[0], this._pos[1], baseZ + Math.sin(k * Math.PI) * 1.6]
       if (k >= 1) {
         this._pos = [this._pos[0], this._pos[1], baseZ]
         return { done: true }
@@ -237,12 +327,11 @@ export class AvatarActor implements AvatarMotionController {
     }, 'JUMP')
   }
 
-  turn(degrees: number): Promise<void> {
+  async turn(degrees: number): Promise<void> {
     const clamped = Math.max(-180, Math.min(180, degrees))
     const from = this._headingDeg
-    const DURATION_S = 0.5
-    return this.drive((_dt, t) => {
-      const k = Math.min(t / DURATION_S, 1)
+    await this.drive((_dt, elapsed) => {
+      const k = Math.min(elapsed / 0.5, 1)
       this._headingDeg = from + clamped * k
       if (k >= 1) {
         log(`数字运维员转向 ${clamped}°（仿真动作）`)
@@ -250,5 +339,15 @@ export class AvatarActor implements AvatarMotionController {
       }
       return { done: false }
     }, 'IDLE')
+  }
+
+  destroy(): void {
+    this.stop()
+    this.updateRemove?.()
+    this.updateRemove = null
+    this.player?.destroy()
+    this.player = null
+    if (this.labelEntity) this.viewer.entities.remove(this.labelEntity)
+    this.labelEntity = null
   }
 }

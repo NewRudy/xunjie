@@ -141,6 +141,8 @@ export interface ResultEnvelope<T = unknown> {
   validUntil?: string
   warnings: string[]
   nextAllowedActions?: string[]
+  /** avatar interpret 端点显式声明本轮由模型还是确定性回退生成。 */
+  planner?: AvatarInterpretPlanner
 }
 
 // ---- 巡检任务与闭环回执（后端快照顶层字段；缺失即不显示，前端不猜） ----
@@ -232,6 +234,12 @@ export interface AvatarInterpretResult {
   normalizedText: string
   reply: string
   commands: AvatarCommand[]
+}
+
+export interface AvatarInterpretPlanner {
+  mode: 'llm' | 'deterministic-fallback'
+  modelAvailable: boolean
+  reason?: string
 }
 
 export interface CreateMissionInput {

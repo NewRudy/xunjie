@@ -5,7 +5,8 @@ import { TransitionError } from '../inspection';
 import { nowIsoShanghai } from '../util';
 import { createMission, handleSceneEvent, RuntimeHttpError, submitApproval, getMission, envelope } from './runtime';
 import { SCENE_ID, SCENE_REVISION } from './context';
-import { AVATAR_WARNINGS, AvatarClarificationError, interpretAvatarCommand } from './avatar';
+import { AVATAR_WARNINGS, AvatarClarificationError } from './avatar';
+import { interpretAvatar } from './avatar-llm';
 import type { SceneEventInput } from './types';
 
 export const agentRoutes = new Hono();
@@ -42,8 +43,9 @@ agentRoutes.post('/missions', async (c) => {
   }
 });
 
-// —— POST /api/agent/avatar/interpret：自然语言 → 受控数字人动作（contracts/avatar-command.md） ——
-// 确定性中文解析（无 LLM/密钥）；只读演示控制面，不改 MissionState 与任务闭环。
+// —— POST /api/agent/avatar/interpret：自然语言 → 受控数字人动作（contracts/avatar-command.md §0/§2） ——
+// LLM-first：配置 AGENT_LLM_API_KEY 时真实调用 OpenAI-compatible 模型，模型 JSON 过确定性白名单校验后返回；
+// 未配置/失败 → 确定性中文解析回退。只读演示控制面，不改 MissionState 与任务闭环。
 agentRoutes.post('/avatar/interpret', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body.text !== 'string' || !body.text.trim() || typeof body.sceneId !== 'string' || typeof body.sceneRevision !== 'string') {
@@ -59,7 +61,7 @@ agentRoutes.post('/avatar/interpret', async (c) => {
     );
   }
   try {
-    const { normalizedText, reply, commands } = interpretAvatarCommand(body.text);
+    const { normalizedText, reply, commands, planner } = await interpretAvatar(body.text);
     return c.json({
       status: 'available' as const,
       data: { normalizedText, reply, commands },
@@ -68,11 +70,13 @@ agentRoutes.post('/avatar/interpret', async (c) => {
       observedAt: nowIsoShanghai(),
       warnings: [...AVATAR_WARNINGS],
       nextAllowedActions: ['POST /api/agent/avatar/interpret {"text","sceneId","sceneRevision"}（继续下一条指令；任务闭环走 /missions，与本接口解耦）'],
-      planner: { mode: 'deterministic-fallback' as const, modelAvailable: false, reason: '确定性中文解析（Demo 稳定，无 LLM/密钥依赖）' },
+      planner,
     });
   } catch (e) {
     if (e instanceof AvatarClarificationError) {
-      return err(c, 400, 'CLARIFICATION_NEEDED', e.message, { clarification: { message: e.message, examples: e.examples } });
+      const extra: Record<string, unknown> = { clarification: { message: e.message, examples: e.examples } };
+      if (e.planner) extra.planner = e.planner;
+      return err(c, 400, 'CLARIFICATION_NEEDED', e.message, extra);
     }
     throw e;
   }

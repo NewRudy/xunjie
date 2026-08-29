@@ -9,7 +9,9 @@
     "preview": "node scripts/copy-cesium.mjs && vite preview"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "~0.14.0",
     "cesium": "^1.144.0",
+    "cesium-player-controller": "0.2.0",
     "vue": "^3.5.0"
   },
   "devDependencies": {

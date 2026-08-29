@@ -7,7 +7,7 @@ import { applyResponse, log, missionStore, resetMission, setEngineOffline } from
 import { emitAssetFocused, emitEvidenceCaptured, emitSceneEntered, flushBufferedEvents } from './bridge'
 import { runSceneCommands } from './commands'
 import { PatrolExecutor } from './executor'
-import { AvatarActor, avatarStore } from './avatar'
+import { CpcAvatarActor, avatarStore } from './avatar'
 import { executeAvatarCommands } from './avatarCommands'
 import { SCENE_ID, SCENE_REVISION, type AvatarCommand, type AvatarInterpretResult, type ResultEnvelope } from './types'
 import { fixture } from '../fixture'
@@ -15,14 +15,17 @@ import { markDemoAnomalyFault } from '../state/parkState'
 
 let viewer: Cesium.Viewer | null = null
 let executor: PatrolExecutor | null = null
-let actor: AvatarActor | null = null
+let actor: CpcAvatarActor | null = null
+let avatarCommandGeneration = 0
 
 /** 场景初始化后调用：建数字运维员与执行器并发送一次 scene_entered */
 export function initAgent(v: Cesium.Viewer): void {
   viewer = v
-  actor = new AvatarActor(v)
-  actor.ensureEntity()
+  actor?.destroy()
+  actor = new CpcAvatarActor(v)
   executor = new PatrolExecutor(v, actor)
+  // 初始化异步进行；所有动作会等待同一个 ready promise，失败状态直接显示在面板。
+  void actor.init().catch(() => undefined)
   emitSceneEntered()
 }
 
@@ -139,15 +142,18 @@ export async function sendAvatarText(text: string): Promise<void> {
   if (!viewer || !actor) return
   const input = text.trim()
   if (!input) return
+  const commandGeneration = ++avatarCommandGeneration
   avatarStore.lastText = input
   avatarStore.reply = ''
   avatarStore.error = ''
   avatarStore.lastCommands = []
+  avatarStore.interpretPlanner = null
   log(`数字运维员指令：「${input}」→ POST /api/agent/avatar/interpret`)
   let resp: AvatarInterpretResult | ResultEnvelope<AvatarInterpretResult>
   try {
     resp = await agentApi.interpretAvatar({ text: input, sceneId: SCENE_ID, sceneRevision: SCENE_REVISION })
   } catch (e) {
+    if (commandGeneration !== avatarCommandGeneration) return
     if (e instanceof AgentApiError && e.status === null) {
       avatarStore.error = `引擎不可达（${agentApi.baseUrl}），无法解释自然语言指令`
       setEngineOffline(avatarStore.error)
@@ -161,12 +167,24 @@ export async function sendAvatarText(text: string): Promise<void> {
     return
   }
 
+  // 较新的文字已经进入解释流程时，丢弃迟到响应，避免旧命令反向接管人物。
+  if (commandGeneration !== avatarCommandGeneration) return
+
   // 兼容直出与统一结果外壳两种返回
   const outer = resp as ResultEnvelope<AvatarInterpretResult>
   const data = (typeof outer?.status === 'string' && outer.data ? outer.data : resp) as AvatarInterpretResult
   missionStore.engine = 'online'
   const warnings = Array.isArray(outer?.warnings) ? outer.warnings : []
   const truth = outer?.truth
+  const planner = outer?.planner
+  avatarStore.interpretPlanner =
+    planner?.mode === 'llm' || planner?.mode === 'deterministic-fallback'
+      ? {
+          mode: planner.mode,
+          modelAvailable: Boolean(planner.modelAvailable),
+          ...(planner.reason ? { reason: planner.reason } : {}),
+        }
+      : null
   avatarStore.reply = data?.reply ?? ''
   if (truth && truth !== 'SIMULATED') {
     log(`警告：interpret 响应 truth=${truth}，合同要求 SIMULATED`)
@@ -189,6 +207,7 @@ export async function sendAvatarText(text: string): Promise<void> {
     avatarStore.repair = null
   }
   for (const cmd of commands) {
+    if (commandGeneration !== avatarCommandGeneration) return
     if (isClosedLoopCommand(cmd)) {
       await runClosedLoopCommand(cmd)
     } else {

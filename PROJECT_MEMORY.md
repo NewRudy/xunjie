@@ -233,3 +233,19 @@
 - `web` 的 `pnpm build` 成功，Cesium 静态资源进入 `dist/cesium`；主 JS 约 4.25 MB（gzip 约 1.16 MB）是当前已知非致命体积问题，截止前不做拆包重构。
 - 前后端 `tsc --noEmit` 均通过；后端受控语言指令 `avatar-test` **66/66** 通过，覆盖启动巡检、结构化同意/拒绝、采集三类证据、人物跑/飞/相对移动和维修仿真，同时验证未知目标与多意图必须澄清。
 - 当前 git 工作树在检查前后均干净。最终 E 检查仅保留到截止前：一次浏览器主链、演示端口和提交状态确认。
+
+### 2026-08-29 · 用户纠偏：文字大模型与人物控制器必须真实接入
+
+- 用户明确语音后续再改，当前主入口是文字对话框；核心链路必须是“文字 → 大模型结构化高层命令 → 确定性白名单校验 → `cesium-player-controller` 执行人物动作”。
+- 复核确认此前实现存在两处实质缺口：`web` 只使用自写 `AvatarActor` 并注释“后续可替换”，没有安装 `cesium-player-controller`；`POST /api/agent/avatar/interpret` 明确是无 LLM 的确定性中文解析。原先“只剩最终主链”的预冻结结论因此撤销。
+- 已核查上游仓库当前 npm 版本 `0.2.0`、MIT 许可及核心 API：`init/update/setInput/reset/getPosition/getIsFlying/changeView/playAnimation` 等；本轮实际接入控制器，但不扩展完整 3D Tiles 碰撞源。
+- 共享合同已升级为 `contracts/avatar-command.md` v1.1：有 Kimi/智谱 OpenAI-compatible 凭据时真实调用模型并校验，无凭据或校验失败时保留诚实的确定性回退；前端须分别展示本轮人物指令解释来源和执行器来源。
+
+### 2026-08-29 · 纠偏实现与浏览器整链验收完成
+
+- 前端已实际安装并初始化 `cesium-player-controller@0.2.0` 与其 Rapier peer dependency，使用上游示例动画人物承载 IDLE/WALK/RUN/FLY/JUMP；通过公开 `addStaticColliders` 接口加载本地最小地面网格。运行时面板明确显示执行器来源，同时声明未接建筑、屋面和 3D Tiles 工程碰撞。
+- 后端 `POST /api/agent/avatar/interpret` 已改为 LLM-first：配置 `AGENT_LLM_API_KEY/BASE_URL/MODEL` 时真实调用 OpenAI-compatible `chat/completions`，模型 JSON 必须整批通过 kind、字段、登记 ID、距离/角度、证据和数量白名单；无凭据、HTTP/超时/JSON/校验失败时整批丢弃并如实标记确定性回退。
+- 用户最新范围已落实：文字对话框是主入口；语音折叠为“后续能力”，不属于本轮完成定义。人物解释来源与任务提案模型状态分开显示，默认验收机无模型凭据时页面显示 `NO_CREDENTIALS`，不冒充在线 LLM。
+- 浏览器实跑通过人物链：`跑到 B2 楼前` 显示 RUN 并沿道路移动；`飞到 B2 屋顶` 显示 FLY；`飞到 B2 逆变器维修 7 号异常组串` 生成 navigate/focus/repair 三命令并完成报警、拆解/进度与恢复仿真。
+- 同一文字框完整跑通任务链：`检查 B2 屋顶异常 → 我同意 → CP-B02-FRONT → CP-B02-ROOF → 采集证据 → 我同意`，最终 `TASK-DEMO-01` 与 `ANOM-DEMO-01` 均 resolved，回执含 photo/thermal/reading 三件仿真证据。前端生产构建及前后端 TypeScript 通过；测试为 avatar 66/66、avatar-llm 92/92、agent 72/72。
+- 真实限制：当前没有真实模型凭据、真实 SCADA/工单/现场证据或工程碰撞；人物路径使用 fixture 登记折线，维修是数字现场可视化。下一轮不应再把这些边界包装成生产级具身控制。
