@@ -253,7 +253,43 @@ function parseNavigate(text: string): AvatarCommand[] | null {
   return withIds([{ kind: 'navigate', targetId: target, movement }]);
 }
 
+// —— 简式运动意图（口语容错，合同 §3）：整句恰为「上/下/左/右/前/后（可带距离）」或「起飞/飞行/降落/悬停」 ——
+// 只做剥离客套词后的精确匹配，绝不子串匹配——「飞到 B2 屋顶」等长句仍走各自登记路由，不受影响。
+
+const BARE_MOVE_RES: Array<[RegExp, 'up' | 'down' | 'left' | 'right' | 'forward' | 'backward']> = [
+  [/^上(?:飞)?([0-9]+(?:\.[0-9]+)?)?米?$/, 'up'],
+  [/^下(?:降|落|飞)?([0-9]+(?:\.[0-9]+)?)?米?$/, 'down'],
+  [/^左(?:移|飞)?([0-9]+(?:\.[0-9]+)?)?米?$/, 'left'],
+  [/^右(?:移|飞)?([0-9]+(?:\.[0-9]+)?)?米?$/, 'right'],
+  [/^前(?:进|行|飞)?([0-9]+(?:\.[0-9]+)?)?米?$/, 'forward'],
+  [/^后(?:退|飞)?([0-9]+(?:\.[0-9]+)?)?米?$/, 'backward'],
+];
+const BARE_TAKEOFF = /^(起飞|飞起来|飞行|飞|升空)$/;
+const BARE_LAND = /^(降落|落地|着陆|降|下来)$/;
+const BARE_HOVER = /^(悬停|停飞|原地待命)$/;
+/** 简式指令专用剥离：按词去客套（「一下」整体剥离，绝不单剥「一/下」——否则「下」会被剥成空串） */
+const BARE_STRIP = /请|麻烦|帮忙|你好|一下|吧|呀|啊|呢|嘛|吗|[。，！？!?,\s]/g;
+
+function parseBareMove(text: string): AvatarCommand[] | null {
+  const bare = text.replace(BARE_STRIP, '');
+  if (BARE_TAKEOFF.test(bare)) return withIds([{ kind: 'move_relative', direction: 'up', distanceMeters: DIST_DEFAULT, movement: 'fly' }]);
+  if (BARE_LAND.test(bare)) return withIds([{ kind: 'move_relative', direction: 'down', distanceMeters: DIST_DEFAULT, movement: 'fly' }]);
+  if (BARE_HOVER.test(bare)) return withIds([{ kind: 'stop' }]);
+  for (const [re, dir] of BARE_MOVE_RES) {
+    const m = bare.match(re);
+    if (!m) continue;
+    const requested = m[1] ? Number.parseFloat(m[1]) : DIST_DEFAULT;
+    if (!Number.isFinite(requested)) return null;
+    // 合同 §3：up/down 必须飞行；水平简式默认步行，句中带跑/飞则跟随
+    const movement: AvatarMovement = dir === 'up' || dir === 'down' ? 'fly' : RE.fly.test(text) ? 'fly' : RE.run.test(text) ? 'run' : 'walk';
+    return withIds([{ kind: 'move_relative', direction: dir, distanceMeters: clampNum(requested, DIST_MIN, DIST_MAX), movement }]);
+  }
+  return null;
+}
+
 function parseRelative(text: string): AvatarCommand[] | null {
+  const bareCmd = parseBareMove(text);
+  if (bareCmd) return bareCmd;
   const dir = RE.forward.test(text) ? 'forward'
     : RE.backward.test(text) ? 'backward'
     : RE.left.test(text) ? 'left'

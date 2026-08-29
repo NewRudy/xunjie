@@ -220,7 +220,7 @@ export function renderAvatarSystemPrompt(): string {
     `2. direction 为 up/down 时 movement 必须为 "fly"；distanceMeters 取 ${DIST_MIN}..${DIST_MAX}；degrees 取 ${DEG_MIN}..${DEG_MAX}。`,
     '3. commands 按执行顺序排列，最多 6 条；无法把用户输入映射为上述命令时，输出 {"reply":"...","commands":[]}。',
     '4. 你只控制数字孪生中的虚拟运维员（SIMULATED 仿真），绝不输出任何真实设备操作。',
-    '5. 语义映射参考：「维修 7 号异常组串」→ navigate CP-INV-B02 + focus_asset STR-B2-07 + repair_simulation；「检查 B2 屋顶异常」→ start_inspection；「我同意/我不同意」→ decide_pending approve/reject；「采集证据」→ capture_evidence。',
+    '5. 语义映射参考：「维修 7 号异常组串」→ navigate CP-INV-B02 + focus_asset STR-B2-07 + repair_simulation；「检查 B2 屋顶异常」→ start_inspection；「我同意/我不同意」→ decide_pending approve/reject；「采集证据」→ capture_evidence；「上/下/左/右/前/后（可带距离，如「上 5 米」）」→ move_relative 对应方向（up/down 必 fly）；「起飞/飞行」→ move_relative up fly；「降落/落地」→ move_relative down fly；「悬停」→ stop。',
   ].join('\n');
 }
 
@@ -237,7 +237,7 @@ export function renderWindAvatarSystemPrompt(): string {
     `2. direction 为 up/down 时 movement 必须为 "fly"；distanceMeters 取 ${DIST_MIN}..${DIST_MAX}；degrees 取 ${DEG_MIN}..${DEG_MAX}。`,
     '3. commands 按执行顺序排列，最多 6 条；无法把用户输入映射为上述命令时，输出 {"reply":"...","commands":[]}。',
     '4. 你只控制数字孪生中的虚拟运维员（SIMULATED 仿真），绝不输出任何真实设备操作。',
-    `5. 语义映射参考：「飞到 N 号风机」→ navigate CP-WT-0N fly（N=1~10，不足两位补零）；「查看 N 号风机」→ focus_asset HS-WTG-0N；「维修 7 号风机」→ navigate CP-WT-07 + focus_asset HS-WTG-07 + repair_simulation（维修仅登记 7 号机 ${WIND_REPAIR.componentLabel}，其他编号输出空 commands 并在 reply 说明）；「回运维点」→ navigate OPS-WIND-01。`,
+    `5. 语义映射参考：「飞到 N 号风机」→ navigate CP-WT-0N fly（N=1~10，不足两位补零）；「查看 N 号风机」→ focus_asset HS-WTG-0N；「维修 7 号风机」→ navigate CP-WT-07 + focus_asset HS-WTG-07 + repair_simulation（维修仅登记 7 号机 ${WIND_REPAIR.componentLabel}，其他编号输出空 commands 并在 reply 说明）；「回运维点」→ navigate OPS-WIND-01；「上/下/左/右/前/后（可带距离，如「上 5 米」）」→ move_relative 对应方向（up/down 必 fly）；「起飞/飞行」→ move_relative up fly；「降落/落地」→ move_relative down fly；「悬停」→ stop。`,
   ].join('\n');
 }
 

@@ -265,6 +265,54 @@ section('路由 POST /api/agent/avatar/interpret（风电 WIND-FARM-01）');
   ok(Array.isArray(clarifyBody.clarification?.examples) && clarifyBody.clarification.examples.includes('维修 7 号风机'), '风电澄清示例来自 WIND_AVATAR_EXAMPLES', JSON.stringify(clarifyBody.clarification?.examples));
 }
 
+// ---------- 简式运动与飞行动词（口语容错，两场景共享） ----------
+section('简式运动：上/下/左/右/前/后 + 起飞/飞行/降落/悬停');
+{
+  const moveCases = [
+    ['上', { direction: 'up', movement: 'fly', distanceMeters: 10 }],
+    ['上 5 米', { direction: 'up', movement: 'fly', distanceMeters: 5 }],
+    ['上升', { direction: 'up', movement: 'fly', distanceMeters: 10 }],
+    ['下', { direction: 'down', movement: 'fly', distanceMeters: 10 }],
+    ['降落', { direction: 'down', movement: 'fly', distanceMeters: 10 }],
+    ['落地', { direction: 'down', movement: 'fly', distanceMeters: 10 }],
+    ['左 3 米', { direction: 'left', movement: 'walk', distanceMeters: 3 }],
+    ['右', { direction: 'right', movement: 'walk', distanceMeters: 10 }],
+    ['前 2 米', { direction: 'forward', movement: 'walk', distanceMeters: 2 }],
+    ['前进', { direction: 'forward', movement: 'walk', distanceMeters: 10 }],
+    ['后退', { direction: 'backward', movement: 'walk', distanceMeters: 10 }],
+    ['麻烦上5米', { direction: 'up', movement: 'fly', distanceMeters: 5 }],
+    ['起飞', { direction: 'up', movement: 'fly', distanceMeters: 10 }],
+    ['飞行', { direction: 'up', movement: 'fly', distanceMeters: 10 }],
+    ['飞', { direction: 'up', movement: 'fly', distanceMeters: 10 }],
+  ];
+  for (const [text, want] of moveCases) {
+    try {
+      const cmds = parseAvatarCommand(text, 'pecc');
+      const c = cmds[0];
+      const mismatches = Object.entries(want).filter(([k, v]) => c?.[k] !== v).map(([k, v]) => `${k}: ${String(c?.[k])}≠${String(v)}`);
+      ok(cmds.length === 1 && c.kind === 'move_relative' && mismatches.length === 0, `「${text}」→ move_relative`, mismatches.join('; '));
+    } catch (e) {
+      ok(false, `「${text}」→ move_relative`, e.message);
+    }
+  }
+  const hover = parseAvatarCommand('悬停', 'pecc');
+  ok(hover[0].kind === 'stop', '「悬停」→ stop', JSON.stringify(hover[0]));
+
+  // 长句不受简式匹配影响
+  const long1 = parseAvatarCommand('飞到 B2 屋顶', 'pecc');
+  ok(long1[0].kind === 'navigate' && long1[0].targetId === 'CP-B02-ROOF', '「飞到 B2 屋顶」仍走导航路由', JSON.stringify(long1[0]));
+  const long2 = parseAvatarCommand('左转 90 度', 'pecc');
+  ok(long2[0].kind === 'turn' && long2[0].degrees === 90, '「左转 90 度」仍走转向路由', JSON.stringify(long2[0]));
+
+  // 风电场景共享简式运动
+  const windUp = parseAvatarCommand('上', 'wind');
+  ok(windUp[0].kind === 'move_relative' && windUp[0].direction === 'up' && windUp[0].movement === 'fly', '风电「上」→ 上升飞行', JSON.stringify(windUp[0]));
+  const windFly = parseAvatarCommand('起飞', 'wind');
+  ok(windFly[0].kind === 'move_relative' && windFly[0].direction === 'up' && windFly[0].movement === 'fly', '风电「起飞」→ 上升飞行', JSON.stringify(windFly[0]));
+  const windLong = parseAvatarCommand('飞到 7 号风机', 'wind');
+  ok(windLong[0].kind === 'navigate' && windLong[0].targetId === 'CP-WT-07', '风电长句仍走导航路由', JSON.stringify(windLong[0]));
+}
+
 // ---------- 汇总 ----------
 fs.rmSync(tmpDb, { force: true });
 console.log(`\n========================================`);
