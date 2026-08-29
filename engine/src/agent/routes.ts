@@ -6,7 +6,7 @@ import { nowIsoShanghai } from '../util';
 import { createMission, handleSceneEvent, RuntimeHttpError, submitApproval, getMission, envelope } from './runtime';
 import { dispatchAvatarText } from './dispatch';
 import { SCENE_ID, SCENE_REVISION } from './context';
-import { AVATAR_WARNINGS, AvatarClarificationError } from './avatar';
+import { AvatarClarificationError } from './avatar';
 import { interpretAvatar } from './avatar-llm';
 import { WIND_SCENE_ID, WIND_SCENE_REVISION } from './windFarm';
 import type { SceneEventInput } from './types';
@@ -84,7 +84,7 @@ agentRoutes.post('/avatar/interpret', async (c) => {
       sourceRefs: ['contracts/avatar-command.md', AVATAR_SCENES[body.sceneId].sourceRef],
       truth: 'SIMULATED' as const,
       observedAt: nowIsoShanghai(),
-      warnings: [...AVATAR_WARNINGS],
+      warnings: [],
       nextAllowedActions: ['POST /api/agent/avatar/interpret {"text","sceneId","sceneRevision"}（继续下一条指令；任务闭环走 /missions，与本接口解耦）'],
       planner,
     });
@@ -139,7 +139,7 @@ agentRoutes.post('/avatar/dispatch', async (c) => {
       sourceRefs: ['contracts/avatar-command.md', AVATAR_SCENES[body.sceneId].sourceRef, ...(res.mission ? [`/api/agent/missions/${res.mission.missionId}`] : [])],
       truth: 'SIMULATED' as const,
       observedAt: nowIsoShanghai(),
-      warnings: [...AVATAR_WARNINGS, ...(res.mission ? res.mission.warnings : [])],
+      warnings: [...(res.mission ? res.mission.warnings : [])],
       nextAllowedActions: missionEnvelope ? missionEnvelope.nextAllowedActions : ['POST /api/agent/avatar/dispatch {"text","sceneId","sceneRevision"}（继续下一条指令）'],
       planner: res.planner,
     });

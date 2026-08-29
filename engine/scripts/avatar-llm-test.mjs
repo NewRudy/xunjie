@@ -210,7 +210,7 @@ section('路由 POST /avatar/interpret（LLM 与回退的 planner 上浮）');
   const okBody = await okRes.json();
   ok(okRes.status === 200 && okBody.planner?.mode === 'llm' && okBody.planner?.modelAvailable === true, '200 + planner.llm 上浮', JSON.stringify(okBody.planner));
   ok(okBody.data?.reply === '模型确认：跑步前往 B2 楼前。', 'reply 为模型输出', okBody.data?.reply);
-  ok(okBody.truth === 'SIMULATED' && okBody.warnings?.some((w) => w.includes('仅数字现场仿真')), 'truth=SIMULATED + 仿真告警不因 LLM 缺失', JSON.stringify(okBody.warnings));
+  ok(okBody.truth === 'SIMULATED' && (okBody.warnings ?? []).length === 0, 'truth=SIMULATED 且不再附带仿真免责告警', JSON.stringify(okBody.warnings));
 
   mockBehavior = { content: mockContent([{ kind: 'navigate', targetId: 'MARS-01', movement: 'walk' }]) };
   const fbRes = await post({ text: '带我去B2楼前' });
@@ -247,7 +247,7 @@ section('风电场景 LLM 校验（scene=wind）');
   const routeRes = await post({ text: '维修 7 号风机', sceneId: 'WIND-FARM-01', sceneRevision: 'fixture-v1' });
   const routeBody = await routeRes.json();
   ok(routeRes.status === 200 && routeBody.planner?.mode === 'llm' && routeBody.data?.commands?.[0]?.targetId === 'HS-WTG-07', '风电路由 LLM 合法输出 → 200 + planner.llm', JSON.stringify(routeBody.planner));
-  ok(routeBody.truth === 'SIMULATED' && routeBody.warnings?.some((w) => w.includes('仅数字现场仿真')), '风电 LLM 路径 truth=SIMULATED + 仿真告警不缺失');
+  ok(routeBody.truth === 'SIMULATED' && (routeBody.warnings ?? []).length === 0, '风电路径 truth=SIMULATED 且不带免责告警');
 }
 
 // ---------- 汇总 ----------

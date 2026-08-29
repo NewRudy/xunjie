@@ -178,19 +178,31 @@ try {
     ok(def.json.data?.conversationId === 'CONV-DEMO', '缺省会话 CONV-DEMO', def.json.data?.conversationId);
   }
 
-  // ---------- 8. 上下文问答（你是谁 / 当前啥场景 / 任务状态） ----------
-  section('上下文问答门控（确定性，不产生命令）');
+  // ---------- 8. 上下文问答（你是谁 / 当前啥场景 / 任务状态 / 对象状态参数） ----------
+  section('上下文问答门控（确定性，不产生命令，回答只讲人话）');
   {
     const who = await dispatch('你是谁', { conversationId: 'CONV-QA' });
     ok(who.status === 200 && who.json.data?.reply?.includes('巡界'), '你是谁 → 巡界身份作答', who.json.data?.reply?.slice(0, 40));
     ok((who.json.data?.commands ?? []).length === 0 && who.json.data?.sceneBrief?.kind === 'identity', '零命令 + identity brief', JSON.stringify(who.json.data?.sceneBrief?.kind));
     const sceneQ = await post(port, '/api/agent/avatar/dispatch', { text: '当前啥场景', ...WIND });
-    ok(sceneQ.status === 200 && sceneQ.json.data?.reply?.includes('WIND-FARM-01'), '当前啥场景 → 场景元数据', sceneQ.json.data?.reply?.slice(0, 50));
-    ok(sceneQ.json.data?.sceneBrief?.kind === 'scene' && sceneQ.json.data.sceneBrief.sceneId === 'WIND-FARM-01', 'scene brief 结构化', JSON.stringify(sceneQ.json.data?.sceneBrief?.sceneId));
+    ok(sceneQ.status === 200 && sceneQ.json.data?.reply?.includes('老鸦岭') && !sceneQ.json.data.reply.includes('WIND-FARM-01'), '场景问答讲人话（不带 ID）', sceneQ.json.data?.reply?.slice(0, 50));
+    ok(sceneQ.json.data?.sceneBrief?.kind === 'scene' && sceneQ.json.data.sceneBrief.sceneId === 'WIND-FARM-01', 'scene brief 结构化（ID 在 brief）', JSON.stringify(sceneQ.json.data?.sceneBrief?.sceneId));
     const taskQ = await dispatch('当前任务状态', { conversationId: 'CONV-QA' });
     ok(taskQ.status === 200 && typeof taskQ.json.data?.reply === 'string' && taskQ.json.data.reply.length > 4, '任务状态有作答', taskQ.json.data?.reply?.slice(0, 40));
     const qaTrace = who.json.data?.trace ?? [];
     ok(qaTrace[0]?.detail === 'context-qa', 'trace 标记 context-qa', JSON.stringify(qaTrace[0]));
+
+    const st3 = await post(port, '/api/agent/avatar/dispatch', { text: '3 号风机什么状态', ...WIND });
+    ok(st3.status === 200 && st3.json.data?.reply?.includes('预警') && !st3.json.data.reply.includes('HS-WTG'), '3 号风机状态（预警，无 ID）', st3.json.data?.reply?.slice(0, 50));
+    const sp7 = await post(port, '/api/agent/avatar/dispatch', { text: '7 号风机的参数', ...WIND });
+    ok(sp7.status === 200 && (sp7.json.data?.reply?.includes('叶轮直径') || sp7.json.data?.reply?.includes('轮毂高度')), '7 号风机参数（尺寸功率）', sp7.json.data?.reply?.slice(0, 50));
+    const st7 = await post(port, '/api/agent/avatar/dispatch', { text: '7 号风机情况严重吗', ...WIND });
+    ok(st7.status === 200 && st7.json.data?.reply?.includes('严重'), '7 号风机严重情况', st7.json.data?.reply?.slice(0, 40));
+    await post(port, '/api/agent/avatar/dispatch', { text: '飞到 5 号风机', ...WIND, conversationId: 'CONV-OBJ' });
+    const it5 = await post(port, '/api/agent/avatar/dispatch', { text: '它什么状态', ...WIND, conversationId: 'CONV-OBJ' });
+    ok(it5.status === 200 && it5.json.data?.reply?.includes('5 号风机') && it5.json.data.reply.includes('正常'), '「它」指代最近导航对象（5 号）', it5.json.data?.reply?.slice(0, 40));
+    const cur = await post(port, '/api/agent/avatar/dispatch', { text: '当前对象的机舱尺寸', ...WIND, conversationId: 'CONV-OBJ' });
+    ok(cur.status === 200 && cur.json.data?.reply?.includes('机舱'), '「当前对象」参数问答', cur.json.data?.reply?.slice(0, 40));
   }
 
   // ---------- 9. 风电场景 ----------

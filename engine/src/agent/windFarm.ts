@@ -12,7 +12,19 @@ export interface WindFarmFixture {
   sceneId: string;
   sceneRevision: string;
   name: string;
-  turbines: { id: string; label: string; no: number; checkpointId: string }[];
+  /** 机组共用规格（人话问答用；键为中文属性名） */
+  specs?: Record<string, string>;
+  turbines: {
+    id: string;
+    label: string;
+    no: number;
+    checkpointId: string;
+    offset?: { east: number; north: number; up: number };
+    headingDeg?: number;
+    riskLevel?: 'normal' | 'warning' | 'critical';
+    /** 人可读的状态说明（演示仿真数据） */
+    stateNote?: string;
+  }[];
   opsPoint: { id: string; label: string };
   repairTargets: { targetId: string; checkpointId: string; componentId: string; componentLabel: string }[];
 }

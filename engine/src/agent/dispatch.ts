@@ -78,14 +78,89 @@ function resetDemo(): void {
 
 type MissionResolve = { ok: true; m: MissionState } | { ok: false; code: string; message: string };
 
-// —— 上下文问答门控（确定性，先于 LLM）：「你是谁」「当前啥场景」「当前任务」等场景元问题 ——
+// —— 上下文问答门控（确定性，先于 LLM）：身份 / 场景 / 任务 / 对象（状态·参数·位置） ——
+// 原则：回答只讲人话——关键事实组织成自然语句；ID/来源/编码留在 sceneBrief 结构化字段给前端使用。
 const IDENTITY_QA_RE = /你是谁|你叫什么|自我介绍|介绍(?:一下|下)?你自己/;
-const SCENE_QA_RE = /什么场景|啥场景|当前场景|这是(?:哪里|什么地方)|场景信息|现在是哪里|哪个场站|什么站|当前模式|什么模式/;
+const SCENE_QA_RE = /什么场景|啥场景|当前场景|这是(?:哪里|什么地方)|场景信息|现在是哪里|哪个场站|什么站/;
 const MISSION_QA_RE = /当前任务|任务状态|什么任务|啥任务|任务进展/;
+
+const OBJ_CMD_VERB_RE = /飞到|跑到|走到|前往|赶去|回去|回到|运维点|维修|修复|消缺|检修|查看|看看|聚焦|对准|停下|停止|站住|暂停|别动|左转|右转|转身|掉头|跳|采集|提交|取证|拍照|检查|巡检|排查|同意|批准|赞同|执行|拒绝|取消|证据|起飞|降落|落地|着陆|悬停|上升|下降|升高|降低|爬升/;
+const OBJ_REFERENT_RE = /它|这个设备|该设备|当前对象|当前设备|这台|该机组/;
+const OBJ_TURBINE_RE = /([0-9]{1,2}|[一二两三四五六七八九十])\s*号\s*(?:风机|机组)?|HS-WTG-(\d{2})/i;
+const OBJ_STATUS_RE = /状态|风险|情况|严重|怎么样|怎样|正常|告警|健康|预警|毛病|问题/;
+const OBJ_SPEC_RE = /参数|尺寸|长宽高|多高|多大|规格|功率|高度|直径|型号|机型|多少米|叶片|齿轮箱|发电机|基础|多少千瓦/;
+const OBJ_POS_RE = /位置|坐标|在哪|朝向|多远|海拔|标高|方位/;
 
 interface ContextAnswer {
   reply: string;
   brief: Record<string, unknown>;
+}
+
+interface WindTurbineMeta {
+  id: string;
+  label: string;
+  no: number;
+  checkpointId: string;
+  offset?: { east: number; north: number; up: number };
+  headingDeg?: number;
+  riskLevel?: 'normal' | 'warning' | 'critical';
+  stateNote?: string;
+}
+
+const RISK_LABEL_CN: Record<string, string> = { normal: '正常', warning: '预警', critical: '严重' };
+
+const CN_NUM: Record<string, number> = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+
+function turbineByNo(no: number): WindTurbineMeta | undefined {
+  return windFarm.turbines.find((t) => t.no === no) as WindTurbineMeta | undefined;
+}
+
+function parseTurbineNo(raw: string): number {
+  if (/^[0-9]+$/.test(raw)) return Number.parseInt(raw, 10);
+  return CN_NUM[raw] ?? Number.NaN;
+}
+
+/** 指代解析：显式「N 号风机」优先；否则回看最近几轮命令里最后指向的机组（「它」） */
+function resolveTurbine(text: string, conversationId: string): WindTurbineMeta | null {
+  const m = text.match(OBJ_TURBINE_RE);
+  if (m) {
+    const no = m[1] !== undefined ? parseTurbineNo(m[1]) : Number.parseInt(m[2] ?? '', 10);
+    return turbineByNo(no) ?? null;
+  }
+  if (OBJ_REFERENT_RE.test(text)) {
+    for (const turn of recentTurns(conversationId, 3)) {
+      for (const c of [...turn.commands].reverse()) {
+        const tm = String(c.targetId ?? '').match(/^(?:HS-WTG|CP-WT)-(\d{2})$/);
+        if (tm) return turbineByNo(Number(tm[1])) ?? null;
+      }
+    }
+  }
+  return null;
+}
+
+function humanPhase(phase: string): string {
+  return (
+    (
+      {
+        created: '刚建立',
+        'context-ready': '正在汇总现场信息',
+        proposed: '已给出处理建议',
+        'awaiting-approval': '正在等你批准',
+        executing: '正在现场执行',
+        'awaiting-evidence': '正在等现场证据',
+        'awaiting-confirmation': '证据齐了，等你确认闭环',
+        resolved: '已完成闭环',
+        escalated: '已升级处理',
+        cancelled: '已取消',
+      } as Record<string, string>
+    )[phase] ?? phase
+  );
+}
+
+function missionHumanLine(): string {
+  const id = latestMissionId();
+  const m = id ? loadMission(id) : null;
+  return m ? `当前有一个巡检任务，${humanPhase(m.phase)}。` : '当前没有进行中的任务。';
 }
 
 function sceneMeta(scene: 'pecc' | 'wind') {
@@ -104,33 +179,71 @@ function sceneMeta(scene: 'pecc' | 'wind') {
       };
 }
 
-function answerContextQuestion(text: string, scene: 'pecc' | 'wind'): ContextAnswer | null {
+function turbineAnswer(t: WindTurbineMeta, text: string): ContextAnswer {
+  const specs = windFarm.specs ?? {};
+  if (OBJ_SPEC_RE.test(text)) {
+    let keys: string[];
+    if (/长宽高|机舱/.test(text)) keys = ['机型', '机舱尺寸'];
+    else if (/高/.test(text)) keys = ['机型', '轮毂高度', '塔筒高度'];
+    else if (/直径|叶轮|叶片/.test(text)) keys = ['机型', '叶轮直径', '叶片长度'];
+    else if (/功率|千瓦|多大/.test(text)) keys = ['机型', '额定功率'];
+    else if (/齿轮箱|发电机|基础/.test(text)) keys = [text.match(/齿轮箱|发电机|基础/)![0]];
+    else keys = ['机型', '额定功率', '轮毂高度', '叶轮直径', '塔筒高度', '机舱尺寸'];
+    const parts = keys.filter((k) => specs[k]).map((k) => `${k} ${specs[k]}`);
+    return { reply: `${t.label}是${specs['机型'] ?? '风电机组'}：${parts.join('；')}。`, brief: { kind: 'object', object: t.id, aspect: 'specs' } };
+  }
+  if (OBJ_POS_RE.test(text)) {
+    const o = t.offset;
+    const where = o ? `在场地${(o.north ?? 0) >= 0 ? '北' : '南'}侧偏${(o.east ?? 0) >= 0 ? '东' : '西'}方向，场地高程约 ${o.up} 米` : '沿山脊布置';
+    return { reply: `${t.label}${where}，机舱朝向约 ${t.headingDeg ?? '—'} 度。`, brief: { kind: 'object', object: t.id, aspect: 'position' } };
+  }
+  const level = RISK_LABEL_CN[t.riskLevel ?? 'normal'];
+  const note = t.stateNote?.trim();
+  const statusLine = level === '正常' ? `${t.label}状态正常` : `${t.label}状态${level}——${note ?? '需要现场关注'}`;
+  return {
+    reply: `${statusLine}。机组是${specs['机型'] ?? '风电机组'}，轮毂高度${specs['轮毂高度'] ?? '—'}，叶轮直径${specs['叶轮直径'] ?? '—'}。想看详细参数可以问我「它的参数」。`,
+    brief: { kind: 'object', object: t.id, aspect: OBJ_STATUS_RE.test(text) ? 'status' : 'overview', riskLevel: t.riskLevel ?? 'normal', stateNote: note ?? null },
+  };
+}
+
+function answerContextQuestion(text: string, scene: 'pecc' | 'wind', conversationId: string): ContextAnswer | null {
   const meta = sceneMeta(scene);
-  const m = (() => {
-    const id = latestMissionId();
-    return id ? loadMission(id) : null;
-  })();
-  const missionLine = m ? `当前任务 ${m.missionId}，阶段 ${m.phase}${m.receipt ? '（已闭环）' : ''}` : '当前没有进行中的任务';
   if (IDENTITY_QA_RE.test(text)) {
     return {
-      reply: `我是「巡界」数字运维员，在${meta.name}的三维现场执行空间作业（SIMULATED 仿真，不控制任何真实设备）。${missionLine}。你可以用中文指挥我移动、巡检与维修推演；闭环动作需经你授权。`,
-      brief: { kind: 'identity', ...meta, missionId: m?.missionId ?? null, missionPhase: m?.phase ?? null },
+      reply: `我是「巡界」数字运维员，在${meta.name}的三维现场干活：移动巡检、设备查看、维修推演都可以交给我，重要的动作会先请你授权。${missionHumanLine()}`,
+      brief: { kind: 'identity', missionPhase: (latestMissionId() ? loadMission(latestMissionId()!)?.phase : null) ?? null },
     };
   }
   if (SCENE_QA_RE.test(text)) {
-    const adapter = activeAdapter();
+    if (scene === 'wind') {
+      const turbines = windFarm.turbines as WindTurbineMeta[];
+      const crit = turbines.filter((t) => t.riskLevel === 'critical');
+      const warn = turbines.filter((t) => t.riskLevel === 'warning');
+      const lines = [`当前是${windFarm.name}，山脊上共有 ${turbines.length} 台${windFarm.specs?.['机型'] ?? '风电机组'}`];
+      if (crit.length) lines.push(`其中${crit.map((t) => t.label).join('、')}问题比较严重——${crit.map((t) => t.stateNote ?? '需要处理').join('；')}`);
+      if (warn.length) lines.push(`${warn.map((t) => t.label).join('、')}有预警`);
+      lines.push(`其余机组运行正常，场内还有一个运维点。${missionHumanLine()}`);
+      return { reply: lines.join('；'), brief: { kind: 'scene', ...meta } };
+    }
     return {
-      reply: `当前场景：${meta.name}（${meta.sceneId}@${meta.sceneRevision}）。已登记对象：${meta.registered}。${missionLine}。指令解释方式：${adapter ? '大模型在线（白名单校验）' : '确定性解析'}。`,
-      brief: { kind: 'scene', ...meta, missionId: m?.missionId ?? null, missionPhase: m?.phase ?? null, plannerMode: adapter ? 'llm' : 'deterministic-fallback' },
+      reply: `当前是光伏园区（演示仿真）：B2 屋顶的光伏阵列里登记了 7 号组串的发电异常，逆变器和楼前、屋面检查点都已入图。${missionHumanLine()}`,
+      brief: { kind: 'scene', ...meta },
     };
   }
   if (MISSION_QA_RE.test(text)) {
+    const id = latestMissionId();
+    const m = id ? loadMission(id) : null;
     return {
       reply: m
-        ? `${missionLine}；巡检任务 ${m.inspectionTaskId ?? '未创建'}；待审批：${m.pendingApproval ? (m.pendingApproval.purpose === 'close' ? '闭环确认' : '执行计划') : '无'}。`
-        : '当前没有进行中的任务。说「检查 B2 屋顶异常」即可创建巡检任务（光伏场景）。',
+        ? `${missionHumanLine()}${m.pendingApproval ? (m.pendingApproval.purpose === 'close' ? '证据已经齐了，就等你一句「我同意」确认闭环。' : '有一份处理建议正等你批准。') : ''}`
+        : '当前没有进行中的任务。说「检查 B2 屋顶异常」就能建一个巡检任务（光伏场景）。',
       brief: { kind: 'mission', sceneId: meta.sceneId, missionId: m?.missionId ?? null, phase: m?.phase ?? null, inspectionTaskId: m?.inspectionTaskId ?? null },
     };
+  }
+  // 对象问答（风电：机组状态/参数/位置；「它」指代最近一轮命令指向的机组）
+  if (scene === 'wind' && !OBJ_CMD_VERB_RE.test(text)) {
+    const t = resolveTurbine(text, conversationId);
+    if (t) return turbineAnswer(t, text);
   }
   return null;
 }
@@ -141,7 +254,7 @@ export async function dispatchAvatarText(input: DispatchInput): Promise<Dispatch
   const t0 = Date.now();
 
   // 上下文问答门控：元问题确定性作答，不消耗 LLM、不产生命令
-  const qa = answerContextQuestion(input.text, input.scene);
+  const qa = answerContextQuestion(input.text, input.scene, conversationId);
   if (qa) {
     const adapter = activeAdapter();
     trace.push({ label: '解释', status: 'ok', durationMs: Date.now() - t0, detail: 'context-qa' });

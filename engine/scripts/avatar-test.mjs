@@ -187,7 +187,7 @@ section('路由 POST /api/agent/avatar/interpret（Hono 冒烟）');
   const body = await res.json();
   ok(res.status === 200 && body.status === 'available', '200 available', JSON.stringify(body).slice(0, 200));
   ok(body.truth === 'SIMULATED', 'truth=SIMULATED');
-  ok(Array.isArray(body.warnings) && body.warnings.some((w) => w.includes('仅数字现场仿真') && w.includes('不控制')), 'warnings 明确仅数字现场仿真、不控制真实设备', JSON.stringify(body.warnings));
+  ok(Array.isArray(body.warnings) && body.warnings.length === 0, 'warnings 不再附带仿真免责（真值标签保留在 truth 字段）', JSON.stringify(body.warnings));
   ok(body.data?.commands?.[0]?.targetId === 'CP-B02-FRONT' && body.data.commands[0].commandId.startsWith('avatar-'), 'data.commands 受控命令 + commandId', JSON.stringify(body.data?.commands));
   ok(body.planner?.mode === 'deterministic-fallback' && body.planner?.modelAvailable === false, 'planner 标识确定性解析（无 LLM）');
   ok(typeof body.data?.normalizedText === 'string' && typeof body.data?.reply === 'string', 'normalizedText + reply 齐备');
