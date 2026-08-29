@@ -4,9 +4,8 @@
 import { fixture, hasNode } from '../fixture';
 import { fnv1a } from '../util';
 import { canonicalJson, type ContextBundle } from './context';
+import { PLAN_STEP_KINDS } from './capabilities';
 import type { Plan, PlanStep, RawProposal } from './types';
-
-const STEP_KINDS = ['navigate', 'focus', 'inspect', 'capture-evidence', 'request-confirmation', 'verify'];
 
 export const planHashOf = (p: { summary: string; steps: unknown }): string =>
   `PLAN-${fnv1a(canonicalJson({ summary: p.summary, steps: p.steps })).toString(16).padStart(8, '0')}`;
@@ -29,7 +28,7 @@ export function validateProposal(raw: RawProposal, bundle: ContextBundle): { ok:
 
   const steps: PlanStep[] = [];
   raw.steps.forEach((s, i) => {
-    if (!STEP_KINDS.includes(s.kind)) throw new Error(`step ${i}: 未知 kind ${s.kind}`);
+    if (!PLAN_STEP_KINDS.includes(s.kind)) throw new Error(`step ${i}: 未知 kind ${s.kind}`);
     if (typeof s.title !== 'string' || !s.title || s.title.length > 200) throw new Error(`step ${i}: title 非法`);
     if (s.targetId !== undefined && (typeof s.targetId !== 'string' || !isRegisteredTarget(s.targetId))) throw new Error(`step ${i}: 未登记目标 ${s.targetId}`);
     if (s.requiredEvidence !== undefined) {

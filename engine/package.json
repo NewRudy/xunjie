@@ -10,7 +10,8 @@
     "smoke": "node scripts/smoke.mjs",
     "test:agent": "node scripts/agent-test.mjs",
     "test:avatar": "tsx scripts/avatar-test.mjs",
-    "test:avatar-llm": "tsx scripts/avatar-llm-test.mjs"
+    "test:avatar-llm": "tsx scripts/avatar-llm-test.mjs",
+    "test:model-gateway": "tsx scripts/model-gateway-test.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
