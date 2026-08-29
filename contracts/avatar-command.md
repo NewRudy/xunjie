@@ -165,3 +165,16 @@ type AvatarCommand =
 - `repair_simulation` 仅登记 `HS-WTG-07@CP-WT-07`；“维修 3 号风机”等 → 400 CLARIFICATION_NEEDED，示例给出风电可说集。
 - 风电场景不支持任务闭环三意图（start_inspection/decide_pending/capture_evidence 仍属 PECC-PARK-01）；风电侧维修留痕由前端按 farm.json 步骤仿真，truth=SIMULATED。
 - 资产许可：山体 CC-BY-4.0（Li Yanquan）、风机 CC-BY-4.0（Sket_h），署名见 farm.json `credits`，前端场景页须可见。
+
+## 10. 服务端受控编排：`POST /api/agent/avatar/dispatch`（P1，2026-08-29）
+
+与 `/avatar/interpret` 同一解释管线（LLM-first + 白名单校验 + 确定性回退，入参 `{ text, sceneId, sceneRevision, missionId?, reset? }`），差异在**执行权收归服务端**：
+
+- 闭环命令（`start_inspection` / `decide_pending` / `capture_evidence`）由服务端直接执行，结果在 `data.dispatch[]`（每条 `{ kind, status: available|rejected, detail|{code,message} }`）：
+  - `start_inspection`：演示复位（任务+异常+Agent 数据，与 `/api/debug/reset` 一致）+ 建任务**原子化**，重复演示不带脏状态；`reset:false` 可关。
+  - `decide_pending`：服务端用当前 `pendingApproval` 补全 `approvalId/contextVersion/planHash` 四重绑定，语义与 `/missions/:id/approval` 完全一致；前端不再读取/回传审批三元组。无任务 → `NO_ACTIVE_MISSION`，无挂起审批 → `NO_PENDING_APPROVAL`。
+  - `capture_evidence`：走既有状态机（过早取证自动暂存、缺 ROOF 证据保持阻塞）；`missionId` 缺省时取最近创建任务。
+- 场景命令（navigate/focus_asset/repair_simulation/运动类）**原样透传**由前端执行（渲染层职责）；审批签发的 `pendingCommands` 仍随任务快照下发。
+- **风电场景闭环命令显式拒绝**（`UNSUPPORTED_IN_SCENE`），场景命令不受影响。
+- 响应顶层 `status`：`available` / `partial`（部分闭环被拒）/ `rejected`（全部闭环被拒）；澄清语义与 §2 相同（400 CLARIFICATION_NEEDED）。
+- 本接口只加不减：`/avatar/interpret` 合同不变。验收套件 `pnpm test:dispatch`（29 项，真实 engine 实例）。
