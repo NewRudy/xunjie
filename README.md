@@ -99,6 +99,7 @@ pnpm dev
 cd engine
 pnpm test:avatar   # 当前 66/66
 pnpm test:avatar-llm # 当前 92/92（本地 mock，证明真实 HTTP 编排路径且不访问公网）
+pnpm test:model-gateway # 当前 32/32（结构化输出网关：JSON 提取/GLM 解包/修复重试/错误分级）
 pnpm test:agent    # 当前 72/72
 npx tsc --noEmit
 

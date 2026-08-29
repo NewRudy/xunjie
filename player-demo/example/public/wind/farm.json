@@ -1,0 +1,61 @@
+{
+  "sceneId": "WIND-FARM-01",
+  "sceneRevision": "fixture-v1",
+  "name": "老鸦岭风电场（演示仿真）",
+  "fictional": true,
+  "note": "巡界风电工程场景包：山体/风机模型 CC-BY-4.0，机组布局来自黔风智维空间演示布局（spatial_demo），不代表真实场站。全部位置为场景原点 ENU 局部偏移（米）。",
+  "origin": { "lon": 106.6, "lat": 26.5, "heightM": 1250 },
+  "assets": {
+    "mountain": {
+      "tilesetUrl": "wind/assets/laoyeling-mountain/tileset.json",
+      "gltfUrl": "wind/assets/laoyeling-mountain/scene.gltf",
+      "colliderModelMatrix": [-1724.98063403724, -514.2390613289523, 0, 0, 229.4525870984511, -769.6834000740796, 1610.8814276427152, 0, -460.2100851462402, 1543.744036896636, 803.1569124870731, 0, -1632111.6278589393, 5474809.601915312, 2829287.008458022, 1],
+      "credit": "Laoyeling Mountain by Li Yanquan, CC-BY-4.0（3D Tiles 1.1 单瓦片包装）"
+    },
+    "turbine": {
+      "gltfUrl": "wind/assets/wind-turbine/scene.gltf",
+      "scale": 2.8,
+      "rotorAnimation": "rotation|Action",
+      "credit": "Wind Turbine by Sket_h (Sketchfab), CC-BY-4.0"
+    },
+    "player": {
+      "glbUrl": "glb/UAL1_Standard.glb",
+      "scale": 0.01
+    }
+  },
+  "opsPoint": { "id": "OPS-WIND-01", "label": "运维点", "offset": { "east": -260, "north": 120, "up": 150 } },
+  "turbines": [
+    { "id": "HS-WTG-01", "label": "1 号风机", "no": 1, "checkpointId": "CP-WT-01", "offset": { "east": -500, "north": -330, "up": 136 }, "headingDeg": 94, "riskLevel": "normal" },
+    { "id": "HS-WTG-02", "label": "2 号风机", "no": 2, "checkpointId": "CP-WT-02", "offset": { "east": -20, "north": -210, "up": 137 }, "headingDeg": 94, "riskLevel": "warning" },
+    { "id": "HS-WTG-03", "label": "3 号风机", "no": 3, "checkpointId": "CP-WT-03", "offset": { "east": 460, "north": -90, "up": 134 }, "headingDeg": 94, "riskLevel": "warning" },
+    { "id": "HS-WTG-04", "label": "4 号风机", "no": 4, "checkpointId": "CP-WT-04", "offset": { "east": -620, "north": 120, "up": 140 }, "headingDeg": 92, "riskLevel": "normal" },
+    { "id": "HS-WTG-05", "label": "5 号风机", "no": 5, "checkpointId": "CP-WT-05", "offset": { "east": -300, "north": 180, "up": 138 }, "headingDeg": 93, "riskLevel": "normal" },
+    { "id": "HS-WTG-06", "label": "6 号风机", "no": 6, "checkpointId": "CP-WT-06", "offset": { "east": 20, "north": 240, "up": 142 }, "headingDeg": 95, "riskLevel": "normal" },
+    { "id": "HS-WTG-07", "label": "7 号风机", "no": 7, "checkpointId": "CP-WT-07", "offset": { "east": 340, "north": 300, "up": 139 }, "headingDeg": 96, "riskLevel": "critical" },
+    { "id": "HS-WTG-08", "label": "8 号风机", "no": 8, "checkpointId": "CP-WT-08", "offset": { "east": 650, "north": 360, "up": 136 }, "headingDeg": 97, "riskLevel": "normal" },
+    { "id": "HS-WTG-09", "label": "9 号风机", "no": 9, "checkpointId": "CP-WT-09", "offset": { "east": -180, "north": 520, "up": 145 }, "headingDeg": 93, "riskLevel": "normal" },
+    { "id": "HS-WTG-10", "label": "10 号风机", "no": 10, "checkpointId": "CP-WT-10", "offset": { "east": 260, "north": 560, "up": 143 }, "headingDeg": 95, "riskLevel": "normal" }
+  ],
+  "repairTargets": [
+    {
+      "targetId": "HS-WTG-07",
+      "checkpointId": "CP-WT-07",
+      "componentId": "GB-HS-BEARING",
+      "componentLabel": "齿轮箱高速端轴承",
+      "steps": [
+        { "id": "RS-1", "label": "安全确认：机组已停机、现场风速满足作业条件（SIMULATED）" },
+        { "id": "RS-2", "label": "到达 7 号风机塔下检查点 CP-WT-07" },
+        { "id": "RS-3", "label": "机舱定位：高亮齿轮箱高速端轴承（GB-HS-BEARING）" },
+        { "id": "RS-4", "label": "读取振动/温度仿真读数，确认轴承磨损特征" },
+        { "id": "RS-5", "label": "更换高速端轴承（仿真作业）" },
+        { "id": "RS-6", "label": "复测：振动/温度回到正常区间（SIMULATED）" },
+        { "id": "RS-7", "label": "生成可追溯维修记录（部件、时间、操作人、SIMULATED 标签）" }
+      ]
+    }
+  ],
+  "credits": [
+    "Laoyeling Mountain by Li Yanquan, CC-BY-4.0",
+    "Wind Turbine by Sket_h (https://sketchfab.com/skettch), CC-BY-4.0",
+    "UAL1_Standard.glb 人物模型见 web/public/vendor/NOTICE.md（CC-BY-4.0）"
+  ]
+}
