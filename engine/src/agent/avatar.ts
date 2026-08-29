@@ -356,10 +356,11 @@ function parseTurn(text: string): AvatarCommand[] | null {
 function parseSimple(text: string): AvatarCommand[] | null {
   if (RE.stop.test(text)) return withIds([{ kind: 'stop' }]);
   if (RE.jump.test(text)) return withIds([{ kind: 'jump' }]);
-  // 去掉客套词后整句恰为「停/跳」也算命中（Demo 口语容错，仍确定性）
-  const bare = text.replace(/[请麻烦帮忙你好吧呀啊呢嘛一下吗。，！？!?,\s]/g, '');
+  // 量词容错（BARE_STRIP 按词剥离，保留「十/下」）：「跳10 下」「跳十下」「跳一下」「跳」都算跳跃——
+  // 合同 jump 无次数字段，次数口语接受但按单次跳执行
+  const bare = text.replace(BARE_STRIP, '');
   if (bare === '停') return withIds([{ kind: 'stop' }]);
-  if (bare === '跳') return withIds([{ kind: 'jump' }]);
+  if (/^跳(?:一)?(?:[0-9一二两三四五六七八九十]+)?下?$/.test(bare)) return withIds([{ kind: 'jump' }]);
   return null;
 }
 

@@ -5,7 +5,7 @@ import {
     Transforms, Viewer,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
-import { playerController } from "cesium-player-controller";
+import { playerController, type PlayerModelOptions } from "cesium-player-controller";
 import type { ColliderSource } from "cesium-player-controller";
 
 // ==================== fixture 类型 ====================
@@ -331,8 +331,8 @@ const TTS_KEY = "xj-solar-tts-enabled";
 const ttsSupported = "speechSynthesis" in window;
 let ttsEnabled = ttsSupported && localStorage.getItem(TTS_KEY) !== "0";
 
-function speak(text: string): void {
-    if (!ttsSupported || !ttsEnabled || !text) return;
+function speak(text: string, force = false): void {
+    if (!ttsSupported || (!ttsEnabled && !force) || !text) return;
     // e2e 探针：最近一次实际播报文本
     (window as unknown as { __lastSpoken?: string }).__lastSpoken = text;
     window.speechSynthesis.cancel();
@@ -584,6 +584,23 @@ async function main() {
         url: `${BASE}solar/ground.glb`,
         modelMatrix: colliderArr,
     }];
+    const defaultPlayerModel: PlayerModelOptions = {
+        url: `${BASE}${solarFixture.assets.player.glbUrl}`,
+        scale: solarFixture.assets.player.scale,
+        idleAnim: "Idle_Loop",
+        walkAnim: "Walk_Loop",
+        runAnim: "Sprint_Loop",
+        jumpAnim: ["Jump_Start", "Jump_Loop", "Jump_Land"],
+        flyAnim: "fly",
+        flyIdleAnim: "flyIdle",
+        flyHoverForwardAnim: "flyHoverForward",
+        flyHoverBackAnim: "flyHoverBack",
+        flyHoverLeftAnim: "flyHoverLeft",
+        flyHoverRightAnim: "flyHoverRight",
+        flyHoverUpAnim: "flyHoverUp",
+        rotateY: -Math.PI / 2,
+        facingOffset: Math.PI / 2,
+    };
     await player.init({
         viewer,
         initPos: spawn,
@@ -593,23 +610,7 @@ async function main() {
         enableSpringCamera: true,
         springCameraTime: 0.07,
         thirdMouseMode: 2, // 拖拽旋转、不锁定指针，保证 HUD 输入框可用
-        playerModelConfig: {
-            url: `${BASE}${solarFixture.assets.player.glbUrl}`,
-            scale: solarFixture.assets.player.scale,
-            idleAnim: "Idle_Loop",
-            walkAnim: "Walk_Loop",
-            runAnim: "Sprint_Loop",
-            jumpAnim: ["Jump_Start", "Jump_Loop", "Jump_Land"],
-            flyAnim: "fly",
-            flyIdleAnim: "flyIdle",
-            flyHoverForwardAnim: "flyHoverForward",
-            flyHoverBackAnim: "flyHoverBack",
-            flyHoverLeftAnim: "flyHoverLeft",
-            flyHoverRightAnim: "flyHoverRight",
-            flyHoverUpAnim: "flyHoverUp",
-            rotateY: -Math.PI / 2,
-            facingOffset: Math.PI / 2,
-        },
+        playerModelConfig: defaultPlayerModel,
         staticCollider: staticColliders,
     });
     player.setPlayerSpeed(500); // ×0.01 → 步行约 5 m/s（手动 WASD）
@@ -628,6 +629,37 @@ async function main() {
         const m = player.getPlayerModel();
         if (m) m.show = !isFirstPerson;
     };
+
+    // ---------- 彩蛋：牛来（对话含「牛来」时切换模型，「换回来」恢复） ----------
+    let niulaiActive = false;
+    let niulaiSwitching = false;
+    const switchAvatarModel = async (toNiulai: boolean) => {
+        if (niulaiSwitching || toNiulai === niulaiActive) return;
+        niulaiSwitching = true;
+        appendSystemLog(toNiulai ? "牛来加载中（模型较大，稍等）…" : "正在切回数字运维员…");
+        try {
+            await player.switchPlayerModel(toNiulai ? {
+                url: `${BASE}glb/niulai.glb`,
+                scale: solarFixture.assets.player.scale, // 与默认模型同 scale：速度/重力/相机比例不动
+                // 牛来无动画：全部显式置空（Cesium 对缺失动画名会抛错），模型保持静姿
+                idleAnim: undefined, walkAnim: undefined, runAnim: undefined,
+                leftWalkAnim: undefined, rightWalkAnim: undefined, backwardAnim: undefined,
+                jumpAnim: undefined, flyAnim: undefined, flyIdleAnim: undefined,
+                flyHoverForwardAnim: undefined, flyHoverBackAnim: undefined,
+                flyHoverLeftAnim: undefined, flyHoverRightAnim: undefined,
+                flyHoverUpAnim: undefined, flyHoverDownAnim: undefined, drivingAnim: undefined,
+                rotateY: 0, facingOffset: -Math.PI / 2, // 牛来模型本地朝向 +X，补偿 -90° 对齐前进方向
+            } as unknown as PlayerModelOptions : { ...defaultPlayerModel });
+            niulaiActive = toNiulai;
+            appendSystemLog(toNiulai ? "牛来登场。对它说「换回来」即可恢复数字运维员。" : "已切回数字运维员。");
+            if (toNiulai) speak("牛来呀 牛来，它迎着行情走来了！", true);
+        } catch {
+            appendSystemLog("模型切换失败，保持当前模型。");
+        } finally {
+            niulaiSwitching = false;
+        }
+    };
+    (window as unknown as { __xjNiulai?: (on: boolean) => Promise<void> }).__xjNiulai = switchAvatarModel;
 
     // 第三人称相机接管时 viewer.camera.flyTo 会被每帧覆盖；
     // focus_asset 需要真正飞相机，这里给相机系统加一个示例侧的旁路开关。
@@ -1428,6 +1460,9 @@ async function main() {
         if (!text) return;
         cmdInput.value = "";
         appendAiUser(text);
+        // 彩蛋：「牛来」换模型；「换回来」恢复
+        if (/牛来|牛奶/.test(text)) { void switchAvatarModel(true); return; }
+        if (niulaiActive && /换回来|切回来|换回去|切回去|恢复/.test(text)) { void switchAvatarModel(false); return; }
         void sendInstruction(text);
     }
 
