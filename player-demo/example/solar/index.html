@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>风电工程场景 · 巡界 XUNJIE</title>
+    <title>光伏电站场景 · 巡界 XUNJIE</title>
     <style>
         html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
         body {
@@ -427,7 +427,7 @@
             border: 1px solid var(--ai-hairline);
             background: rgba(16, 32, 44, 0.5);
         }
-        /* 卡片气泡（风机信息 / 维修记录卡）保持宽版，不随文本收缩 */
+        /* 卡片气泡（设备信息 / 维修记录卡）保持宽版，不随文本收缩 */
         .ai-bubble-card { width: 100%; max-width: 96%; }
         .ai-msg.user .ai-bubble {
             background: rgba(67, 201, 232, 0.09);
@@ -468,7 +468,7 @@
             font-family: var(--font-mono);
         }
 
-        /* 面板内卡片（风机信息 / 维修记录卡气泡） */
+        /* 面板内卡片（设备信息 / 维修记录卡气泡） */
         .ai-card {
             border: 1px solid var(--ai-hairline);
             border-radius: 10px;
@@ -594,13 +594,13 @@
             </header>
             <div class="assistant-msgs" id="ai-msgs"></div>
             <div class="assistant-quick" id="ai-quick">
-                <button type="button" data-q="飞到 7 号风机">飞到 7 号风机</button>
-                <button type="button" data-q="查看 5 号风机">查看 5 号风机</button>
+                <button type="button" data-q="带我去 B 区 7 号组串">带我去 B 区 7 号组串</button>
+                <button type="button" data-q="查看 B2 逆变器">查看 B2 逆变器</button>
                 <button type="button" data-q="回运维点">回运维点</button>
             </div>
             <form id="cmd-form" autocomplete="off">
                 <input id="cmd-input" type="text" maxlength="1000"
-                    placeholder="指挥数字运维员：导航 / 维修 / 查看…" />
+                    placeholder="指挥数字运维员：定位组串 / 维修 / 查看…" />
                 <button id="cmd-mic" type="button" aria-label="按住说话" title="按住说话（豆包语音识别）">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

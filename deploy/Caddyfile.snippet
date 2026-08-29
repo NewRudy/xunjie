@@ -1,0 +1,10 @@
+	# —— xunjie 巡捷 demo（静态站 + agent 引擎），由 deploy/Caddyfile.snippet 追加 ——
+	# 经宿主机网关 172.18.0.1 的端口映射反代（docker 跨项目容器 DNS 解析异常，不用容器名）
+	handle /xunjie/api/* {
+		uri strip_prefix /xunjie
+		reverse_proxy 172.18.0.1:18787
+	}
+	handle /xunjie/* {
+		uri strip_prefix /xunjie
+		reverse_proxy 172.18.0.1:18080
+	}

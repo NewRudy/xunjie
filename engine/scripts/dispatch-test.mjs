@@ -214,6 +214,30 @@ try {
     ok(pscene.status === 200 && pscene.json.data?.reply?.includes('黔光智维'), '光伏场景问答讲人话', pscene.json.data?.reply?.slice(0, 40));
   }
 
+  // ---------- 8.5 通用问题门控（闲聊/能力/时间/异常/巡览/任务场景化） ----------
+  section('通用问题门控（三场景，回答不串场）');
+  {
+    const hi = await dispatch('你好');
+    ok(hi.status === 200 && hi.json.data?.reply?.includes('值班'), '你好 → 值班问候', hi.json.data?.reply?.slice(0, 40));
+    const thx = await dispatch('谢谢');
+    ok(thx.status === 200 && thx.json.data?.reply?.includes('不客气'), '谢谢 → 回应');
+    const cap = await post(port, '/api/agent/avatar/dispatch', { text: '你会干什么', ...WIND });
+    ok(cap.status === 200 && cap.json.data?.reply?.includes('风机'), '你会干什么 → 场景化能力清单', cap.json.data?.reply?.slice(0, 40));
+    const tm = await dispatch('现在几点');
+    ok(tm.status === 200 && /\d{1,2} 点 \d{1,2} 分/.test(tm.json.data?.reply ?? ''), '现在几点 → 北京时间', tm.json.data?.reply);
+    const anomW = await post(port, '/api/agent/avatar/dispatch', { text: '有没有异常', ...WIND });
+    ok(anomW.status === 200 && anomW.json.data?.reply?.includes('7 号风机') && anomW.json.data.reply.includes('严重'), '有没有异常(风电) → 7 号机严重', anomW.json.data?.reply?.slice(0, 40));
+    const anomP = await dispatch('有没有异常');
+    ok(anomP.status === 200 && anomP.json.data?.reply?.includes('组串'), '有没有异常(光伏) → 组串', anomP.json.data?.reply?.slice(0, 40));
+    const tour = await post(port, '/api/agent/avatar/dispatch', { text: '带我转一圈', ...WIND });
+    ok(tour.status === 200 && (tour.json.data?.commands?.length ?? 0) >= 1 && tour.json.data.commands[0].kind === 'navigate', '带我转一圈 → 巡览命令队列', JSON.stringify(tour.json.data?.commands?.map((c) => c.targetId)));
+    ok(tour.json.data?.sceneBrief?.kind === 'tour', '巡览 brief 标记 tour');
+    const mwind = await post(port, '/api/agent/avatar/dispatch', { text: '当前任务状态', ...WIND });
+    ok(mwind.status === 200 && mwind.json.data?.reply?.includes('暂未接入任务闭环'), '风电任务问答不串光伏任务', mwind.json.data?.reply?.slice(0, 40));
+    const clrP = await dispatch('今天天气怎么样');
+    ok(clrP.status === 400 && !String(clrP.json.error?.message).includes('3 号风机'), '光伏澄清示例不串风电', String(clrP.json.error?.message).slice(0, 60));
+  }
+
   // ---------- 9. 风电场景 ----------
   section('风电场景：闭环不可达（澄清）+ 场景命令透传');
   {
@@ -222,6 +246,35 @@ try {
     const nav = await post(port, '/api/agent/avatar/dispatch', { text: '跑到 2 号风机', ...WIND });
     ok(nav.status === 200 && nav.json.data?.commands?.[0]?.kind === 'navigate' && nav.json.data.commands[0].targetId === 'CP-WT-02', '风电导航命令透传（CP-WT-02）', JSON.stringify(nav.json?.data?.commands));
     ok(nav.json.data?.mission === null, '风电命令不触碰任务状态');
+  }
+
+  // ---------- 8b. 水电路线规划 + 光伏找板子（dispatch 冒烟） ----------
+  section('水电路线规划 + 光伏找板子');
+  {
+    const HYDRO = { sceneId: 'HYDRO-PLANT-01', sceneRevision: 'fixture-v1' };
+    const route = await post(port, '/api/agent/avatar/dispatch', { text: '规划巡检路线', ...HYDRO });
+    const routeCmds = route.json.data?.commands ?? [];
+    ok(route.status === 200 && route.json.status === 'available', '水电路线规划 200 available', JSON.stringify(route.json?.status));
+    ok(
+      routeCmds.length === 4 && routeCmds.every((c) => c.kind === 'navigate' && c.movement === 'fly') && routeCmds.map((c) => c.targetId).join(',') === 'CP-HU-01,CP-HU-02,CP-HU-03,CP-GATE-01',
+      '路线命令数组透传（1→2→3 号机组→泄洪闸门）',
+      JSON.stringify(routeCmds.map((c) => c.targetId)),
+    );
+    ok((route.json.data?.dispatch ?? []).length === 0 && route.json.data?.mission === null, '路线规划不触碰任务闭环（无 outcomes）');
+
+    const find = await dispatch('B区7号组串在哪');
+    ok(find.status === 200 && find.json.data?.commands?.[0]?.kind === 'navigate' && find.json.data.commands[0].targetId === 'CP-STR-B-07' && find.json.data.commands[0].movement === 'walk', '找板子：B区7号组串在哪 → CP-STR-B-07 walk（绕过问答门控）', JSON.stringify(find.json?.data?.commands));
+    ok(find.json.data?.reply?.includes('已带你过去'), '找板子 reply 带方位描述', find.json.data?.reply);
+
+    const amb = await dispatch('7号组串在哪');
+    ok(amb.status === 400 && amb.json.error?.code === 'CLARIFICATION_NEEDED' && String(amb.json.error?.message).includes('区号'), '只说「7号组串」→ 400 澄清补区号', String(amb.json.error?.message).slice(0, 50));
+
+    const rep = await dispatch('维修B区7号组串');
+    const repKinds = (rep.json.data?.commands ?? []).map((c) => c.kind).join(',');
+    ok(rep.status === 200 && repKinds === 'navigate,focus_asset,repair_simulation' && rep.json.data.commands[2].checkpointId === 'CP-STR-B-07', '维修B区7号组串 → 三命令（repair @ CP-STR-B-07）', JSON.stringify(rep.json?.data?.commands));
+
+    const repOther = await dispatch('维修 B 区 3 号组串');
+    ok(repOther.status === 400 && repOther.json.error?.code === 'CLARIFICATION_NEEDED' && String(repOther.json.error?.message).includes('未登记维修对象'), '维修其他组串 → 400 澄清未登记维修对象', String(repOther.json.error?.message).slice(0, 50));
   }
 
   // ---------- 8. 兼容与边界 ----------

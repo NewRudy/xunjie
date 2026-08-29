@@ -56,6 +56,11 @@ export function parseServerResponse(frame: Buffer): SeedResponse {
   const serialization = frame[2] >> 4;
   const compression = frame[2] & 0x0f;
   let offset = headerSize;
+  // flags & 0x1：带 4 字节序号（bigmodel_async 结果帧会带，须跳过再读负载长度）
+  if ((flags & 0x1) !== 0) {
+    if (frame.length < offset + 4) throw new Error('Seed frame missing sequence');
+    offset += 4;
+  }
 
   const readPayload = (): Buffer => {
     const size = frame.readUInt32BE(offset);

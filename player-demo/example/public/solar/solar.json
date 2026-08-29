@@ -1,0 +1,1967 @@
+{
+  "sceneId": "PECC-PARK-01",
+  "sceneRevision": "fixture-v1",
+  "name": "黔光智维光伏阵列（演示仿真）",
+  "specs": {
+    "组件型号": "550 W 单晶双面组件",
+    "系统电压": "1500 V 直流",
+    "阵列布局": "7 组团 × 12 组串环形阵列",
+    "组串组件数": "26 块/组串"
+  },
+  "fictional": true,
+  "note": "巡界光伏工程场景包：环形光伏阵列模型（Sketchfab），区/号编址为虚构演示布局。全部位置为场景原点 ENU 局部偏移（米）。",
+  "origin": {
+    "lon": 106.7,
+    "lat": 26.7,
+    "heightM": 1100
+  },
+  "assets": {
+    "farm": {
+      "glbUrl": "solar/assets/solar-farm/scene.glb",
+      "scale": 1,
+      "credit": "Solar Farm Array (Sketchfab)"
+    },
+    "player": {
+      "glbUrl": "glb/UAL1_Standard.glb",
+      "scale": 0.01
+    }
+  },
+  "opsPoint": {
+    "id": "OPS-01",
+    "label": "运维点",
+    "offset": {
+      "east": 20,
+      "north": -42,
+      "up": 0
+    }
+  },
+  "inverters": [
+    {
+      "id": "INV-B-02",
+      "label": "B2 逆变器",
+      "model": "HUAWEI SUN2000-110KTL-M2",
+      "ratedKw": 110,
+      "stringCount": 12,
+      "efficiency": 0.986,
+      "offset": {
+        "east": -4.0,
+        "north": -26.3,
+        "up": 0
+      },
+      "checkpointId": "CP-INV-B02",
+      "riskLevel": "normal",
+      "stateNote": "运行正常"
+    }
+  ],
+  "strings": [
+    {
+      "id": "STR-A1-01",
+      "zone": "A",
+      "no": 1,
+      "label": "A 区 1 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 0.0,
+        "north": -8.0,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-02",
+      "zone": "A",
+      "no": 2,
+      "label": "A 区 2 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 4.0,
+        "north": -6.9,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-03",
+      "zone": "A",
+      "no": 3,
+      "label": "A 区 3 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 6.9,
+        "north": -4.0,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-04",
+      "zone": "A",
+      "no": 4,
+      "label": "A 区 4 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 8.0,
+        "north": 0.0,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-05",
+      "zone": "A",
+      "no": 5,
+      "label": "A 区 5 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 6.9,
+        "north": 4.0,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-06",
+      "zone": "A",
+      "no": 6,
+      "label": "A 区 6 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 4.0,
+        "north": 6.9,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-07",
+      "zone": "A",
+      "no": 7,
+      "label": "A 区 7 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -0.0,
+        "north": 8.0,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-08",
+      "zone": "A",
+      "no": 8,
+      "label": "A 区 8 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -4.0,
+        "north": 6.9,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-09",
+      "zone": "A",
+      "no": 9,
+      "label": "A 区 9 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -6.9,
+        "north": 4.0,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-10",
+      "zone": "A",
+      "no": 10,
+      "label": "A 区 10 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -8.0,
+        "north": -0.0,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-11",
+      "zone": "A",
+      "no": 11,
+      "label": "A 区 11 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -6.9,
+        "north": -4.0,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-A1-12",
+      "zone": "A",
+      "no": 12,
+      "label": "A 区 12 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -4.0,
+        "north": -6.9,
+        "up": 0
+      },
+      "inverterId": "INV-A-01"
+    },
+    {
+      "id": "STR-B1-01",
+      "zone": "B",
+      "no": 1,
+      "label": "B 区 1 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -11.6,
+        "north": 19.4,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-02",
+      "zone": "B",
+      "no": 2,
+      "label": "B 区 2 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -8.7,
+        "north": 22.3,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-03",
+      "zone": "B",
+      "no": 3,
+      "label": "B 区 3 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -7.6,
+        "north": 26.3,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-04",
+      "zone": "B",
+      "no": 4,
+      "label": "B 区 4 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -8.7,
+        "north": 30.3,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-05",
+      "zone": "B",
+      "no": 5,
+      "label": "B 区 5 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -11.6,
+        "north": 33.2,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-06",
+      "zone": "B",
+      "no": 6,
+      "label": "B 区 6 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -15.6,
+        "north": 34.3,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B2-07",
+      "zone": "B",
+      "no": 7,
+      "label": "B 区 7 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -19.6,
+        "north": 33.2,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-08",
+      "zone": "B",
+      "no": 8,
+      "label": "B 区 8 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -22.5,
+        "north": 30.3,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-09",
+      "zone": "B",
+      "no": 9,
+      "label": "B 区 9 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -23.6,
+        "north": 26.3,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-10",
+      "zone": "B",
+      "no": 10,
+      "label": "B 区 10 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -22.5,
+        "north": 22.3,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-11",
+      "zone": "B",
+      "no": 11,
+      "label": "B 区 11 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -19.6,
+        "north": 19.4,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-B1-12",
+      "zone": "B",
+      "no": 12,
+      "label": "B 区 12 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -15.6,
+        "north": 18.3,
+        "up": 0
+      },
+      "inverterId": "INV-B-02"
+    },
+    {
+      "id": "STR-C1-01",
+      "zone": "C",
+      "no": 1,
+      "label": "C 区 1 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 15.6,
+        "north": 18.3,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-02",
+      "zone": "C",
+      "no": 2,
+      "label": "C 区 2 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 19.6,
+        "north": 19.4,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-03",
+      "zone": "C",
+      "no": 3,
+      "label": "C 区 3 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 22.5,
+        "north": 22.3,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-04",
+      "zone": "C",
+      "no": 4,
+      "label": "C 区 4 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 23.6,
+        "north": 26.3,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-05",
+      "zone": "C",
+      "no": 5,
+      "label": "C 区 5 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 22.5,
+        "north": 30.3,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-06",
+      "zone": "C",
+      "no": 6,
+      "label": "C 区 6 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 19.6,
+        "north": 33.2,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-07",
+      "zone": "C",
+      "no": 7,
+      "label": "C 区 7 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 15.6,
+        "north": 34.3,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-08",
+      "zone": "C",
+      "no": 8,
+      "label": "C 区 8 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 11.6,
+        "north": 33.2,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-09",
+      "zone": "C",
+      "no": 9,
+      "label": "C 区 9 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 8.7,
+        "north": 30.3,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-10",
+      "zone": "C",
+      "no": 10,
+      "label": "C 区 10 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 7.6,
+        "north": 26.3,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-11",
+      "zone": "C",
+      "no": 11,
+      "label": "C 区 11 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 8.7,
+        "north": 22.3,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-C1-12",
+      "zone": "C",
+      "no": 12,
+      "label": "C 区 12 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 11.6,
+        "north": 19.4,
+        "up": 0
+      },
+      "inverterId": "INV-C-01"
+    },
+    {
+      "id": "STR-D1-01",
+      "zone": "D",
+      "no": 1,
+      "label": "D 区 1 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 35.8,
+        "north": -6.9,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-02",
+      "zone": "D",
+      "no": 2,
+      "label": "D 区 2 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 38.7,
+        "north": -4.0,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-03",
+      "zone": "D",
+      "no": 3,
+      "label": "D 区 3 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 39.8,
+        "north": 0.0,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-04",
+      "zone": "D",
+      "no": 4,
+      "label": "D 区 4 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 38.7,
+        "north": 4.0,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-05",
+      "zone": "D",
+      "no": 5,
+      "label": "D 区 5 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 35.8,
+        "north": 6.9,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-06",
+      "zone": "D",
+      "no": 6,
+      "label": "D 区 6 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 31.8,
+        "north": 8.0,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-07",
+      "zone": "D",
+      "no": 7,
+      "label": "D 区 7 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 27.8,
+        "north": 6.9,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-08",
+      "zone": "D",
+      "no": 8,
+      "label": "D 区 8 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 24.9,
+        "north": 4.0,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-09",
+      "zone": "D",
+      "no": 9,
+      "label": "D 区 9 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 23.8,
+        "north": -0.0,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-10",
+      "zone": "D",
+      "no": 10,
+      "label": "D 区 10 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 24.9,
+        "north": -4.0,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-11",
+      "zone": "D",
+      "no": 11,
+      "label": "D 区 11 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 27.8,
+        "north": -6.9,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-D1-12",
+      "zone": "D",
+      "no": 12,
+      "label": "D 区 12 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 31.8,
+        "north": -8.0,
+        "up": 0
+      },
+      "inverterId": "INV-D-01"
+    },
+    {
+      "id": "STR-E1-01",
+      "zone": "E",
+      "no": 1,
+      "label": "E 区 1 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 15.6,
+        "north": -34.3,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-02",
+      "zone": "E",
+      "no": 2,
+      "label": "E 区 2 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 19.6,
+        "north": -33.2,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-03",
+      "zone": "E",
+      "no": 3,
+      "label": "E 区 3 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 22.5,
+        "north": -30.3,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-04",
+      "zone": "E",
+      "no": 4,
+      "label": "E 区 4 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 23.6,
+        "north": -26.3,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-05",
+      "zone": "E",
+      "no": 5,
+      "label": "E 区 5 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 22.5,
+        "north": -22.3,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-06",
+      "zone": "E",
+      "no": 6,
+      "label": "E 区 6 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 19.6,
+        "north": -19.4,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-07",
+      "zone": "E",
+      "no": 7,
+      "label": "E 区 7 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 15.6,
+        "north": -18.3,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-08",
+      "zone": "E",
+      "no": 8,
+      "label": "E 区 8 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 11.6,
+        "north": -19.4,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-09",
+      "zone": "E",
+      "no": 9,
+      "label": "E 区 9 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 8.7,
+        "north": -22.3,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-10",
+      "zone": "E",
+      "no": 10,
+      "label": "E 区 10 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 7.6,
+        "north": -26.3,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-11",
+      "zone": "E",
+      "no": 11,
+      "label": "E 区 11 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 8.7,
+        "north": -30.3,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-E1-12",
+      "zone": "E",
+      "no": 12,
+      "label": "E 区 12 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": 11.6,
+        "north": -33.2,
+        "up": 0
+      },
+      "inverterId": "INV-E-01"
+    },
+    {
+      "id": "STR-F1-01",
+      "zone": "F",
+      "no": 1,
+      "label": "F 区 1 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -11.6,
+        "north": -33.2,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-02",
+      "zone": "F",
+      "no": 2,
+      "label": "F 区 2 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -8.7,
+        "north": -30.3,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-03",
+      "zone": "F",
+      "no": 3,
+      "label": "F 区 3 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -7.6,
+        "north": -26.3,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-04",
+      "zone": "F",
+      "no": 4,
+      "label": "F 区 4 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -8.7,
+        "north": -22.3,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-05",
+      "zone": "F",
+      "no": 5,
+      "label": "F 区 5 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -11.6,
+        "north": -19.4,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-06",
+      "zone": "F",
+      "no": 6,
+      "label": "F 区 6 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -15.6,
+        "north": -18.3,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-07",
+      "zone": "F",
+      "no": 7,
+      "label": "F 区 7 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -19.6,
+        "north": -19.4,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-08",
+      "zone": "F",
+      "no": 8,
+      "label": "F 区 8 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -22.5,
+        "north": -22.3,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-09",
+      "zone": "F",
+      "no": 9,
+      "label": "F 区 9 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -23.6,
+        "north": -26.3,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-10",
+      "zone": "F",
+      "no": 10,
+      "label": "F 区 10 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -22.5,
+        "north": -30.3,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-11",
+      "zone": "F",
+      "no": 11,
+      "label": "F 区 11 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -19.6,
+        "north": -33.2,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-F1-12",
+      "zone": "F",
+      "no": 12,
+      "label": "F 区 12 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -15.6,
+        "north": -34.3,
+        "up": 0
+      },
+      "inverterId": "INV-F-01"
+    },
+    {
+      "id": "STR-G1-01",
+      "zone": "G",
+      "no": 1,
+      "label": "G 区 1 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -31.8,
+        "north": -8.0,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-02",
+      "zone": "G",
+      "no": 2,
+      "label": "G 区 2 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -27.8,
+        "north": -6.9,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-03",
+      "zone": "G",
+      "no": 3,
+      "label": "G 区 3 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -24.9,
+        "north": -4.0,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-04",
+      "zone": "G",
+      "no": 4,
+      "label": "G 区 4 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -23.8,
+        "north": 0.0,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-05",
+      "zone": "G",
+      "no": 5,
+      "label": "G 区 5 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -24.9,
+        "north": 4.0,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-06",
+      "zone": "G",
+      "no": 6,
+      "label": "G 区 6 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -27.8,
+        "north": 6.9,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-07",
+      "zone": "G",
+      "no": 7,
+      "label": "G 区 7 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -31.8,
+        "north": 8.0,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-08",
+      "zone": "G",
+      "no": 8,
+      "label": "G 区 8 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -35.8,
+        "north": 6.9,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-09",
+      "zone": "G",
+      "no": 9,
+      "label": "G 区 9 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -38.7,
+        "north": 4.0,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-10",
+      "zone": "G",
+      "no": 10,
+      "label": "G 区 10 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -39.8,
+        "north": -0.0,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-11",
+      "zone": "G",
+      "no": 11,
+      "label": "G 区 11 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -38.7,
+        "north": -4.0,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    },
+    {
+      "id": "STR-G1-12",
+      "zone": "G",
+      "no": 12,
+      "label": "G 区 12 号组串",
+      "panelCount": 26,
+      "offset": {
+        "east": -35.8,
+        "north": -6.9,
+        "up": 0
+      },
+      "inverterId": "INV-G-01"
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "CP-STR-A-01",
+      "stringId": "STR-A1-01",
+      "offset": {
+        "east": 0.0,
+        "north": -8.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-02",
+      "stringId": "STR-A1-02",
+      "offset": {
+        "east": 4.0,
+        "north": -6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-03",
+      "stringId": "STR-A1-03",
+      "offset": {
+        "east": 6.9,
+        "north": -4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-04",
+      "stringId": "STR-A1-04",
+      "offset": {
+        "east": 8.0,
+        "north": 0.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-05",
+      "stringId": "STR-A1-05",
+      "offset": {
+        "east": 6.9,
+        "north": 4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-06",
+      "stringId": "STR-A1-06",
+      "offset": {
+        "east": 4.0,
+        "north": 6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-07",
+      "stringId": "STR-A1-07",
+      "offset": {
+        "east": -0.0,
+        "north": 8.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-08",
+      "stringId": "STR-A1-08",
+      "offset": {
+        "east": -4.0,
+        "north": 6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-09",
+      "stringId": "STR-A1-09",
+      "offset": {
+        "east": -6.9,
+        "north": 4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-10",
+      "stringId": "STR-A1-10",
+      "offset": {
+        "east": -8.0,
+        "north": -0.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-11",
+      "stringId": "STR-A1-11",
+      "offset": {
+        "east": -6.9,
+        "north": -4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-A-12",
+      "stringId": "STR-A1-12",
+      "offset": {
+        "east": -4.0,
+        "north": -6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-01",
+      "stringId": "STR-B1-01",
+      "offset": {
+        "east": -11.6,
+        "north": 19.4,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-02",
+      "stringId": "STR-B1-02",
+      "offset": {
+        "east": -8.7,
+        "north": 22.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-03",
+      "stringId": "STR-B1-03",
+      "offset": {
+        "east": -7.6,
+        "north": 26.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-04",
+      "stringId": "STR-B1-04",
+      "offset": {
+        "east": -8.7,
+        "north": 30.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-05",
+      "stringId": "STR-B1-05",
+      "offset": {
+        "east": -11.6,
+        "north": 33.2,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-06",
+      "stringId": "STR-B1-06",
+      "offset": {
+        "east": -15.6,
+        "north": 34.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-07",
+      "stringId": "STR-B2-07",
+      "offset": {
+        "east": -19.6,
+        "north": 33.2,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-08",
+      "stringId": "STR-B1-08",
+      "offset": {
+        "east": -22.5,
+        "north": 30.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-09",
+      "stringId": "STR-B1-09",
+      "offset": {
+        "east": -23.6,
+        "north": 26.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-10",
+      "stringId": "STR-B1-10",
+      "offset": {
+        "east": -22.5,
+        "north": 22.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-11",
+      "stringId": "STR-B1-11",
+      "offset": {
+        "east": -19.6,
+        "north": 19.4,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-B-12",
+      "stringId": "STR-B1-12",
+      "offset": {
+        "east": -15.6,
+        "north": 18.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-01",
+      "stringId": "STR-C1-01",
+      "offset": {
+        "east": 15.6,
+        "north": 18.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-02",
+      "stringId": "STR-C1-02",
+      "offset": {
+        "east": 19.6,
+        "north": 19.4,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-03",
+      "stringId": "STR-C1-03",
+      "offset": {
+        "east": 22.5,
+        "north": 22.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-04",
+      "stringId": "STR-C1-04",
+      "offset": {
+        "east": 23.6,
+        "north": 26.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-05",
+      "stringId": "STR-C1-05",
+      "offset": {
+        "east": 22.5,
+        "north": 30.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-06",
+      "stringId": "STR-C1-06",
+      "offset": {
+        "east": 19.6,
+        "north": 33.2,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-07",
+      "stringId": "STR-C1-07",
+      "offset": {
+        "east": 15.6,
+        "north": 34.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-08",
+      "stringId": "STR-C1-08",
+      "offset": {
+        "east": 11.6,
+        "north": 33.2,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-09",
+      "stringId": "STR-C1-09",
+      "offset": {
+        "east": 8.7,
+        "north": 30.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-10",
+      "stringId": "STR-C1-10",
+      "offset": {
+        "east": 7.6,
+        "north": 26.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-11",
+      "stringId": "STR-C1-11",
+      "offset": {
+        "east": 8.7,
+        "north": 22.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-C-12",
+      "stringId": "STR-C1-12",
+      "offset": {
+        "east": 11.6,
+        "north": 19.4,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-01",
+      "stringId": "STR-D1-01",
+      "offset": {
+        "east": 35.8,
+        "north": -6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-02",
+      "stringId": "STR-D1-02",
+      "offset": {
+        "east": 38.7,
+        "north": -4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-03",
+      "stringId": "STR-D1-03",
+      "offset": {
+        "east": 39.8,
+        "north": 0.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-04",
+      "stringId": "STR-D1-04",
+      "offset": {
+        "east": 38.7,
+        "north": 4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-05",
+      "stringId": "STR-D1-05",
+      "offset": {
+        "east": 35.8,
+        "north": 6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-06",
+      "stringId": "STR-D1-06",
+      "offset": {
+        "east": 31.8,
+        "north": 8.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-07",
+      "stringId": "STR-D1-07",
+      "offset": {
+        "east": 27.8,
+        "north": 6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-08",
+      "stringId": "STR-D1-08",
+      "offset": {
+        "east": 24.9,
+        "north": 4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-09",
+      "stringId": "STR-D1-09",
+      "offset": {
+        "east": 23.8,
+        "north": -0.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-10",
+      "stringId": "STR-D1-10",
+      "offset": {
+        "east": 24.9,
+        "north": -4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-11",
+      "stringId": "STR-D1-11",
+      "offset": {
+        "east": 27.8,
+        "north": -6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-D-12",
+      "stringId": "STR-D1-12",
+      "offset": {
+        "east": 31.8,
+        "north": -8.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-01",
+      "stringId": "STR-E1-01",
+      "offset": {
+        "east": 15.6,
+        "north": -34.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-02",
+      "stringId": "STR-E1-02",
+      "offset": {
+        "east": 19.6,
+        "north": -33.2,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-03",
+      "stringId": "STR-E1-03",
+      "offset": {
+        "east": 22.5,
+        "north": -30.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-04",
+      "stringId": "STR-E1-04",
+      "offset": {
+        "east": 23.6,
+        "north": -26.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-05",
+      "stringId": "STR-E1-05",
+      "offset": {
+        "east": 22.5,
+        "north": -22.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-06",
+      "stringId": "STR-E1-06",
+      "offset": {
+        "east": 19.6,
+        "north": -19.4,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-07",
+      "stringId": "STR-E1-07",
+      "offset": {
+        "east": 15.6,
+        "north": -18.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-08",
+      "stringId": "STR-E1-08",
+      "offset": {
+        "east": 11.6,
+        "north": -19.4,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-09",
+      "stringId": "STR-E1-09",
+      "offset": {
+        "east": 8.7,
+        "north": -22.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-10",
+      "stringId": "STR-E1-10",
+      "offset": {
+        "east": 7.6,
+        "north": -26.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-11",
+      "stringId": "STR-E1-11",
+      "offset": {
+        "east": 8.7,
+        "north": -30.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-E-12",
+      "stringId": "STR-E1-12",
+      "offset": {
+        "east": 11.6,
+        "north": -33.2,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-01",
+      "stringId": "STR-F1-01",
+      "offset": {
+        "east": -11.6,
+        "north": -33.2,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-02",
+      "stringId": "STR-F1-02",
+      "offset": {
+        "east": -8.7,
+        "north": -30.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-03",
+      "stringId": "STR-F1-03",
+      "offset": {
+        "east": -7.6,
+        "north": -26.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-04",
+      "stringId": "STR-F1-04",
+      "offset": {
+        "east": -8.7,
+        "north": -22.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-05",
+      "stringId": "STR-F1-05",
+      "offset": {
+        "east": -11.6,
+        "north": -19.4,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-06",
+      "stringId": "STR-F1-06",
+      "offset": {
+        "east": -15.6,
+        "north": -18.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-07",
+      "stringId": "STR-F1-07",
+      "offset": {
+        "east": -19.6,
+        "north": -19.4,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-08",
+      "stringId": "STR-F1-08",
+      "offset": {
+        "east": -22.5,
+        "north": -22.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-09",
+      "stringId": "STR-F1-09",
+      "offset": {
+        "east": -23.6,
+        "north": -26.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-10",
+      "stringId": "STR-F1-10",
+      "offset": {
+        "east": -22.5,
+        "north": -30.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-11",
+      "stringId": "STR-F1-11",
+      "offset": {
+        "east": -19.6,
+        "north": -33.2,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-F-12",
+      "stringId": "STR-F1-12",
+      "offset": {
+        "east": -15.6,
+        "north": -34.3,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-01",
+      "stringId": "STR-G1-01",
+      "offset": {
+        "east": -31.8,
+        "north": -8.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-02",
+      "stringId": "STR-G1-02",
+      "offset": {
+        "east": -27.8,
+        "north": -6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-03",
+      "stringId": "STR-G1-03",
+      "offset": {
+        "east": -24.9,
+        "north": -4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-04",
+      "stringId": "STR-G1-04",
+      "offset": {
+        "east": -23.8,
+        "north": 0.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-05",
+      "stringId": "STR-G1-05",
+      "offset": {
+        "east": -24.9,
+        "north": 4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-06",
+      "stringId": "STR-G1-06",
+      "offset": {
+        "east": -27.8,
+        "north": 6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-07",
+      "stringId": "STR-G1-07",
+      "offset": {
+        "east": -31.8,
+        "north": 8.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-08",
+      "stringId": "STR-G1-08",
+      "offset": {
+        "east": -35.8,
+        "north": 6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-09",
+      "stringId": "STR-G1-09",
+      "offset": {
+        "east": -38.7,
+        "north": 4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-10",
+      "stringId": "STR-G1-10",
+      "offset": {
+        "east": -39.8,
+        "north": -0.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-11",
+      "stringId": "STR-G1-11",
+      "offset": {
+        "east": -38.7,
+        "north": -4.0,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-STR-G-12",
+      "stringId": "STR-G1-12",
+      "offset": {
+        "east": -35.8,
+        "north": -6.9,
+        "up": 0
+      }
+    },
+    {
+      "id": "CP-INV-B02",
+      "stringId": null,
+      "offset": {
+        "east": -4.0,
+        "north": -26.3,
+        "up": 0
+      }
+    }
+  ],
+  "demoAnomaly": {
+    "id": "ANOM-DEMO-01",
+    "targetStringId": "STR-B2-07",
+    "type": "string-undercurrent",
+    "magnitude": -0.18,
+    "suspected": "旁路二极管击穿/热斑",
+    "note": "演示日 T0 起注入；消缺确认后仿真器恢复正常出力"
+  },
+  "repairTargets": [
+    {
+      "targetId": "STR-B2-07",
+      "checkpointId": "CP-STR-B-07",
+      "componentId": "STRING-BYPASS-DIODE",
+      "componentLabel": "组串旁路二极管",
+      "steps": [
+        {
+          "id": "RS-1",
+          "label": "安全确认：组串已断电、直流侧已隔离（SIMULATED）"
+        },
+        {
+          "id": "RS-2",
+          "label": "到达 B 区 7 号组串检查点 CP-STR-B-07"
+        },
+        {
+          "id": "RS-3",
+          "label": "定位：高亮旁路二极管接线盒（STRING-BYPASS-DIODE）"
+        },
+        {
+          "id": "RS-4",
+          "label": "读取电流/热成像仿真读数，确认二极管击穿特征"
+        },
+        {
+          "id": "RS-5",
+          "label": "更换旁路二极管（仿真作业）"
+        },
+        {
+          "id": "RS-6",
+          "label": "复测：组串电流回到正常区间（SIMULATED）"
+        },
+        {
+          "id": "RS-7",
+          "label": "生成可追溯维修记录（部件、时间、操作人、SIMULATED 标签）"
+        }
+      ]
+    }
+  ],
+  "credits": [
+    "Solar Farm Array (Sketchfab)",
+    "UAL1_Standard.glb 人物模型见 web/public/vendor/NOTICE.md（CC-BY-4.0）"
+  ]
+}

@@ -39,12 +39,14 @@ function copyCesium(): Plugin {
     };
 }
 
+const deployBase = process.env.XUNJIE_BASE ?? "/cesium-player-controller/";
+
 export default defineConfig({
-    base: "/cesium-player-controller/",
+    base: deployBase,
     root: path.resolve(__dirname, "example"),
     plugins: [copyCesium()],
     define: {
-        CESIUM_BASE_URL: JSON.stringify("/cesium-player-controller/cesium/"),
+        CESIUM_BASE_URL: JSON.stringify(`${deployBase}cesium/`),
     },
     server: { host: true },
     resolve: {
@@ -62,6 +64,8 @@ export default defineConfig({
                 "3dgs": path.resolve(__dirname, "example", "3dgs", "index.html"),
                 "gltf": path.resolve(__dirname, "example", "gltf", "index.html"),
                 "wind": path.resolve(__dirname, "example", "wind", "index.html"),
+                "hydro": path.resolve(__dirname, "example", "hydro", "index.html"),
+                "solar": path.resolve(__dirname, "example", "solar", "index.html"),
             },
         },
     },

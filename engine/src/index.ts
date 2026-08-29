@@ -6,6 +6,10 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+
+// 本机开发凭据从 engine/.env 加载（gitignored；不覆盖已有环境变量，无 .env 时静默跳过）
+// 放在所有 import 之后、任何 env 读取之前——voice.ts 等在请求时才读 env，这里启动时加载即可
+try { process.loadEnvFile(new URL('../.env', import.meta.url)); } catch { /* 无 .env：相关功能显式未启用 */ }
 import { getWeatherRange } from './weather';
 import { actualSeries, annualYieldCheck, ensureCalibration, expectedSeries, PVGIS_ANCHOR_KWH_KWP, totalParkKwp } from './generation';
 import { loadForecastHourly, loadProfile15 } from './load';
@@ -29,6 +33,16 @@ app.use('*', cors()); // web dev server（5173）跨域访问
 
 // —— 通用错误格式与参数守卫（均直接返回 Response，保证 Hono 处理器始终有返回值）——
 const err = (c: any, status: number, code: string, message: string) => c.json({ error: { code, message } }, status as any);
+
+// —— 访问口令（部署公网时设 AGENT_ACCESS_KEY；本地 dev 不设则不校验）——
+const ACCESS_KEY = process.env.AGENT_ACCESS_KEY ?? '';
+if (ACCESS_KEY) {
+  app.use('/api/*', async (c, next) => {
+    const key = c.req.query('key') ?? c.req.header('x-agent-key');
+    if (key !== ACCESS_KEY) return err(c, 401, 'UNAUTHORIZED', '缺少或错误的访问口令（query ?key= 或 header x-agent-key）');
+    await next();
+  });
+}
 
 /** date 查询参数：缺省今天；非法 → 400 Response；合法 → 日期串 */
 function dateArg(c: any): string | Response {

@@ -290,3 +290,24 @@
 - **测试**：avatar 110/110、avatar-llm 98/98、gateway 32/32、dispatch 56/56(真实引擎)、evals 40/40、voice 14/14、agent 72/72,tsc 前后端全绿。
 - **文档同步**：README 重写(双场景/dispatch/语音/新验证矩阵)、DEMO_SCRIPT_90S v2(风电页口径)、avatar-command §0/§2/§7 更新、scene-package.md 新建；SUBMISSION_ONE_PAGER/TEAM 文档数字待同步(本轮部分完成)。
 - 待办：光伏沉浸式页(闭环故事的家)、闭环可视化组件(提案/审批/证据/回执)进 AI 面板、真实凭据端到端冒烟、部署链接、对象问答接损失折钱(lossKwhTotal 现成)。
+
+### 2026-08-29 · 水电场景页落地（坝体摄影测量 + 全链路复用）
+
+- **资产**：用户提供的 `monticello_dam.zip`（Sketchfab，Monticello Dam by Mr. Trevor，CC-BY-4.0）解压至 `player-demo/example/public/hydro/assets/monticello-dam/`（91MB，已 gitignore）；`Hydro03b.fbx`（厂房内部）暂未用，待用户确认后转换接入。署名登记在 `player-demo/UPSTREAM.md`。
+- **fixture**：`player-demo/example/public/hydro/dam.json`（sceneId `HYDRO-PLANT-01`/`fixture-v1`，虚构电站「黔澜峡水电站」）：origin 106.85/26.9/650m、坝模型 scale=60、运维点 OPS-HYDRO-01、机组 HS-HU-01..03（02 critical=主轴密封磨损、03 warning=定子温度趋势）、泄洪闸 HS-GATE-01、维修对象 HS-HU-02 主轴密封 @ CP-HU-02（7 步，与风电同构）。
+- **页面**：`example/hydro/` 从 wind 页克隆（数字人/AI 悬浮球/双击语音/截图能力全复用），删风场流线与风机循环，改单坝体 Model + 设备标记点；入口已在 vite.config 注册、首页 01 水电卡接入。**场景照明**：坝体背阳面全黑 → 加均匀 IBL 环境光（模型 `imageBasedLighting.sphericalHarmonicCoefficients` L0=0.55）+ 跟随相机的 DirectionalLight 头灯（intensity 1.8，每帧 preRender 同步 camera.directionWC）。
+- **点位标定**（关键经验）：摄影测量模型的视觉/碰撞对不准时，**别信 pickPosition 扫描**（rugged 区误差 10-20m），唯一可信流程 = `__xjTeleport` 传送→物理沉降→第三人称截图目检。页面保留调试钩子：`__xjCam/__xjLocal/__xjGround/__xjMark/__xjVisualScan/__xjTeleport`，`?collider=raw|px|nx` 切碰撞校正（默认 px）。最终点位全部截图验证：运维点(40,0,-34.4 沿河公路面朝大坝)、1号机组(-100,-30,-20.4 坝趾厂房)、2号机组(-110,-25,-16.3 厂房)、3号机组(-90,-25,-36.1 厂房旁)、泄洪闸门(-125,28,-14 坝顶肩)。
+- **engine**：hydro 场景包注册完成（`src/agent/hydroDam.ts` + registry/avatar/capabilities/avatar-llm/routes/dispatch 全链），机组词/闸门词解析、维修仅 HS-HU-02、问答托底同风电口径；测试全绿，curl 实测「飞到2号机组」「维修2号机组」dispatch 正常。已知遗留：dispatch 下裸「去泄洪闸门」会被对象问答门控接住（风电同款既有行为）。
+- **验证**：`tsc -p example/tsconfig.json` 通过；无头 chrome（9223/9333 端口套路，init 需等 42s）截图验证重生点/机组/闸门视角；碰撞默认 px（模型矩阵×RotX90°，同风电）。
+- 待办：Hydro03b 厂房内部场景（FBX 转换）、水电页 LLM 播报音色与风电对齐、光伏页。
+
+### 2026-08-29 · 光伏场景页落地 + 痛点功能（路径规划 / 找板子）
+
+- **水电厂房撤回**：Beauharnois 厂房（方案A 叠坝趾）做完标定后用户拍板不要了——dam.json 撤掉 powerhouse 条目、机组点位回退坝趾三点；页面 powerhouse 加载代码保留但条件渲染（fixture 没有即不生效）。glb 仍在本地（gitignored）。
+- **光伏资产**：`solar_farm_array.glb`（85MB，745k tris，Sketchfab 下载，**许可待回源确认**）→ `player-demo/example/public/solar/assets/solar-farm/scene.glb`（gitignored）。米制、含地板，7 环形组团×12 平台，组团中心 A=(0,0) B=(-15.6,-26.3) C=(15.6,-26.3) D=(31.8,0) E=(15.6,26.3) F=(-15.6,26.3) G=(-31.8,0)（ENU，E=局部x/N=-局部z/U=局部y）。**朝向：raw（不旋转）即正确**，Cesium 自带 Y-up→Z-up。
+- **fixture**：`public/solar/solar.json`（sceneId `PECC-PARK-01`/`fixture-v1`，与 engine 光伏场景包同 id）：84 组串 STR-{zone}{n}-{nn} + 85 检查点 CP-STR-{ZONE}-{nn} + 逆变器 + repairTarget 仅 STR-B2-07（旁路二极管 7 步，兼容旧演示异常链 ANOM-DEMO-01）。opsPoint (20,-42,0)。
+- **页面**：`example/solar/` 从 hydro 克隆（数字人/AI 悬浮球/语音/截图全复用）。碰撞不用 85MB 模型三角网——自生成 616B `ground.glb` 平地 quad。标记只显示区标签/异常组串/逆变器；navigate 到 CP-STR-* 时画 5×3×5m 橙色高亮盒（核心痛点功能）。首页 03 卡从 wip 转为正式卡接入 `./solar/`。
+- **engine 新意图**（solarArray.ts 新建，镜像 wind/hydro 模式）：①水电「规划巡检路线」→ 4 条 navigate fly（CP-HU-01→02→03→CP-GATE-01）；②光伏找板子「B区7号组串在哪/带我去」→ navigate walk CP-STR-B-07（带方位描述），排号忽略、中文数字支持、STR-B1-07/B2-07 同指；歧义（无区号）→ 澄清列 A~G；「维修B区7号组串」→ navigate+focus_asset+repair_simulation 三命令。registry adaptPecc 合并登记 84 组串（不替换 park fixture）。测试：avatar 130/130、dispatch 64/64 等全绿。
+- **播报规则改版**：原「仅 sceneBrief 问答播报」导致光伏导航类回复全静默 → 三场景（wind/hydro/solar）统一改为**有 reply 就播报**（浏览器本地 TTS）。
+- **光伏跳/飞恢复**：子代理初版按"平地走查"禁了 Space 跳/F 飞（keyMap null + jump 命令拒绝），用户要求恢复——删 keyMap 覆盖、补 makeJump、键位提示改回全套。
+- 待办：光伏模型许可回源确认；contracts/avatar-command.md §3 登记清单同步 CP-STR；部署链接。

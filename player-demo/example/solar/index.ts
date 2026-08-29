@@ -1,38 +1,44 @@
 import {
-    Cartesian2, Cartesian3, Cesium3DTileset, Color, CallbackProperty, Entity,
-    HeadingPitchRoll, Math as CMath, Matrix3, Matrix4, Model, ModelAnimationLoop,
+    Cartesian2, Cartesian3, Color, CallbackProperty, DirectionalLight, Entity,
+    HeadingPitchRoll, Math as CMath, Matrix3, Matrix4, Model,
     PerspectiveFrustum, ScreenSpaceEventHandler, ScreenSpaceEventType,
     Transforms, Viewer,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import { playerController } from "cesium-player-controller";
 import type { ColliderSource } from "cesium-player-controller";
-import { createWindFieldLayer } from "./windFieldLayer";
-import { WIND_FIELD_CONFIG } from "./windFieldConfig";
 
 // ==================== fixture 类型 ====================
 
-interface FarmOffset { east: number; north: number; up: number }
-interface FarmTurbine {
-    id: string; label: string; no: number; checkpointId: string;
-    offset: FarmOffset; headingDeg: number; riskLevel: "normal" | "warning" | "critical";
+interface SolarOffset { east: number; north: number; up: number }
+interface SolarInverter {
+    id: string; label: string; model?: string; ratedKw?: number; stringCount?: number;
+    efficiency?: number; offset: SolarOffset; checkpointId: string;
+    riskLevel?: "normal" | "warning" | "critical"; stateNote?: string;
 }
-interface FarmRepairStep { id: string; label: string }
-interface FarmRepairTarget {
+interface SolarString {
+    id: string; zone: string; no: number; label: string;
+    panelCount?: number; offset: SolarOffset; inverterId: string;
+}
+interface SolarCheckpoint { id: string; stringId?: string; offset: SolarOffset }
+interface SolarRepairStep { id: string; label: string }
+interface SolarRepairTarget {
     targetId: string; checkpointId: string; componentId: string; componentLabel: string;
-    steps: FarmRepairStep[];
+    steps: SolarRepairStep[];
 }
-interface FarmFixture {
+interface SolarFixture {
     sceneId: string; sceneRevision: string; name: string;
     origin: { lon: number; lat: number; heightM: number };
     assets: {
-        mountain: { tilesetUrl: string; gltfUrl: string; colliderModelMatrix: number[]; credit: string };
-        turbine: { gltfUrl: string; scale: number; rotorAnimation: string; credit: string };
+        farm: { glbUrl: string; scale: number; credit: string };
         player: { glbUrl: string; scale: number };
     };
-    opsPoint: { id: string; label: string; offset: FarmOffset };
-    turbines: FarmTurbine[];
-    repairTargets: FarmRepairTarget[];
+    opsPoint: { id: string; label: string; offset: SolarOffset };
+    inverters: SolarInverter[];
+    strings: SolarString[];
+    checkpoints: SolarCheckpoint[];
+    demoAnomaly?: { id: string; targetStringId: string; type: string; suspected?: string };
+    repairTargets: SolarRepairTarget[];
     credits: string[];
 }
 
@@ -88,14 +94,14 @@ interface InterpretResponse {
 // ==================== 常量与 DOM ====================
 
 const BASE = import.meta.env.BASE_URL;
-// dispatch：解释与闭环执行同端点（服务端编排收权）；风电场景闭环命令由后端显式拒绝，页面如实展示
+// dispatch：解释与闭环执行同端点（服务端编排收权）；光伏场景闭环命令由后端显式拒绝，页面如实展示
 // 部署构建注入 VITE_ENGINE_BASE（如 /xunjie/api）与 VITE_API_KEY；本地 dev 缺省直连 localhost:8787
 const ENGINE_BASE = String(import.meta.env.VITE_ENGINE_BASE ?? "http://localhost:8787/api").replace(/\/+$/, "");
 const API_KEY = String(import.meta.env.VITE_API_KEY ?? "");
 const withKey = (path: string) => `${ENGINE_BASE}${path}${API_KEY ? `?key=${encodeURIComponent(API_KEY)}` : ""}`;
 const ENGINE_URL = withKey("/agent/avatar/dispatch");
 // dispatch P2 会话：轮次摘要与 trace 按会话聚合
-const CONVERSATION_ID = "CONV-WIND-DEMO";
+const CONVERSATION_ID = "CONV-SOLAR-DEMO";
 const DISPATCH_LABEL: Record<string, string> = {
     start_inspection: "创建巡检任务",
     decide_pending: "审批",
@@ -131,8 +137,8 @@ const ORB_SIZE = 58;
 const PANEL_W = 320;
 const PANEL_H = 400;
 const DRAG_THRESHOLD = 6;
-const ORB_POS_KEY = "xj-wind-orb-pos";
-const PANEL_POS_KEY = "xj-wind-panel-pos";
+const ORB_POS_KEY = "xj-solar-orb-pos";
+const PANEL_POS_KEY = "xj-solar-panel-pos";
 
 function clampNum(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, v));
@@ -321,7 +327,7 @@ window.addEventListener("resize", () => {
 });
 
 // ---------- 浏览器本地 TTS 语音播报 ----------
-const TTS_KEY = "xj-wind-tts-enabled";
+const TTS_KEY = "xj-solar-tts-enabled";
 const ttsSupported = "speechSynthesis" in window;
 let ttsEnabled = ttsSupported && localStorage.getItem(TTS_KEY) !== "0";
 
@@ -397,6 +403,12 @@ const viewer = new Viewer("cesiumContainer", {
 
 (viewer.camera.frustum as PerspectiveFrustum).fov = CMath.toRadians(90);
 viewer.scene.globe.baseColor = Color.fromCssColorString("#0d141b");
+// 模型背阳面全黑，影响巡检可读性：跟随相机的头灯（模型环境光在模型加载后单独设置）
+const headlamp = new DirectionalLight({ direction: new Cartesian3(0, 0, -1), intensity: 1.8 });
+viewer.scene.preRender.addEventListener(() => {
+    Cartesian3.clone(viewer.camera.directionWC, headlamp.direction);
+});
+viewer.scene.light = headlamp;
 // Retina 屏限制渲染分辨率上限：默认按 devicePixelRatio=2 渲染 GPU 压力翻倍，1.5 足够清晰
 viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 1.5);
 viewer.clock.shouldAnimate = true;
@@ -405,10 +417,10 @@ viewer.clock.shouldAnimate = true;
 
 async function main() {
     // 1. 读取场景 fixture（唯一事实源）
-    const farm: FarmFixture = await (await fetch(`${BASE}wind/farm.json`)).json();
+    const solarFixture: SolarFixture = await (await fetch(`${BASE}solar/solar.json`)).json();
     // 页面内不展示署名行；资产许可与作者信息以仓库 player-demo/UPSTREAM.md 为准
 
-    const { origin } = farm;
+    const { origin } = solarFixture;
     const localFrame = Transforms.eastNorthUpToFixedFrame(
         Cartesian3.fromDegrees(origin.lon, origin.lat, origin.heightM), undefined, new Matrix4());
     const localFrameInv = Matrix4.inverse(localFrame, new Matrix4());
@@ -418,70 +430,91 @@ async function main() {
         Matrix4.multiplyByPoint(localFrameInv, p, out);
     const absHeight = (up: number) => origin.heightM + up; // ENU up ≈ 椭球高（±0.01 弧度范围内）
 
-    // 2. 山体 3D Tiles
-    // SSE 放宽到 20（默认 16 附近）：相机跟人物移动时减少瓦片换档频次，移动更不容易掉帧
-    const tileset = await Cesium3DTileset.fromUrl(`${BASE}${farm.assets.mountain.tilesetUrl}`);
-    tileset.maximumScreenSpaceError = 20;
-    viewer.scene.primitives.add(tileset);
-
+    // 2. 光伏阵列模型（glTF，米制，场景根规范 Y-up：地板 y=0、平台 y≈3.5）。
+    // 渲染管线的轴向转换实测直接正确（局部x→E / 局部-z→N / 局部y→U，包围球中心 U=+6.7），
+    // 无需额外校正（默认 raw，与水电坝体一致）。调试参数 ?farm=raw|px|nx|fx 可切换模型矩阵
+    // 附加旋转（另见 __xjFarm / __xjFarmInfo 钩子）。
     // 初始俯瞰视角（人物初始化后由第三人称相机接管）
     viewer.camera.setView({
-        destination: localToWorld(0, -400, 1000),
-        orientation: { heading: 0, pitch: CMath.toRadians(-55), roll: 0 },
+        destination: localToWorld(0, -150, 110),
+        orientation: { heading: 0, pitch: CMath.toRadians(-38), roll: 0 },
     });
 
-    // 3. 风机 ×10（模型 + 风险等级标记）
-    const modelToTurbine = new Map<Model, FarmTurbine>();
-    const markerToTurbine = new Map<Entity, FarmTurbine>();
-    // fromGltfAsync  resolve 时 model.ready 可能仍为 false（动画尚未注册），需等 readyEvent
-    const whenModelReady = (model: Model): Promise<void> => {
-        if (model.ready) return Promise.resolve();
-        return new Promise((resolve) => {
-            const remove = model.readyEvent.addEventListener(() => { remove(); resolve(); });
+    const rotX = (rad: number) => Matrix4.fromRotationTranslation(
+        Matrix3.fromRotationX(rad), Cartesian3.ZERO, new Matrix4());
+    const farmMode = new URLSearchParams(location.search).get("farm") ?? "raw";
+    const farmFrame = Matrix4.multiplyByUniformScale(
+        Transforms.headingPitchRollToFixedFrame(
+            localToWorld(0, 0, 0), new HeadingPitchRoll(0, 0, 0)),
+        solarFixture.assets.farm.scale, new Matrix4());
+    const FARM_ROT: Record<string, number> = { px: CMath.PI_OVER_TWO, nx: -CMath.PI_OVER_TWO, fx: Math.PI };
+    const farmMatrixOf = (mode: string) => mode === "raw" || !FARM_ROT[mode]
+        ? Matrix4.clone(farmFrame, new Matrix4())
+        : Matrix4.multiply(farmFrame, rotX(FARM_ROT[mode]), new Matrix4());
+    const farmMatrix = farmMatrixOf(farmMode);
+    let farmModel: Model | null = null;
+    try {
+        farmModel = await Model.fromGltfAsync({
+            url: `${BASE}${solarFixture.assets.farm.glbUrl}`,
+            modelMatrix: farmMatrix,
         });
-    };
-    for (const t of farm.turbines) {
-        const pos = localToWorld(t.offset.east, t.offset.north, t.offset.up);
-        const modelMatrix = Transforms.headingPitchRollToFixedFrame(
-            pos, new HeadingPitchRoll(CMath.toRadians(t.headingDeg), 0, 0));
-        Model.fromGltfAsync({
-            url: `${BASE}${farm.assets.turbine.gltfUrl}`,
-            modelMatrix,
-            scale: farm.assets.turbine.scale,
-        }).then(async (model) => {
-            viewer.scene.primitives.add(model);
-            modelToTurbine.set(model, t);
-            await whenModelReady(model);
-            // 播放桨叶转动动画；按名字找不到时退回 index 0
-            const errText = (e: unknown) => (e instanceof Error ? `${e.name}: ${e.message}` : JSON.stringify(e));
-            try {
-                model.activeAnimations.add({
-                    name: farm.assets.turbine.rotorAnimation,
-                    loop: ModelAnimationLoop.REPEAT,
-                });
-            } catch (e1) {
-                try {
-                    model.activeAnimations.add({ index: 0, loop: ModelAnimationLoop.REPEAT });
-                } catch (e2) {
-                    console.warn(
-                        `风机 ${t.id} 桨叶动画播放失败（动画数=${model.activeAnimations.length}）:`,
-                        `按名[${farm.assets.turbine.rotorAnimation}]→${errText(e1)}; 按index0→${errText(e2)}`,
-                    );
-                }
-            }
-        }).catch((e) => console.warn(`风机模型加载失败 ${t.id}:`, e));
+        // 均匀环境光：让背阳/阴影面也可读（模型无自发光）
+        const ambient = 0.55;
+        farmModel.imageBasedLighting.sphericalHarmonicCoefficients = [
+            new Cartesian3(ambient, ambient, ambient), new Cartesian3(), new Cartesian3(),
+            new Cartesian3(), new Cartesian3(), new Cartesian3(),
+            new Cartesian3(), new Cartesian3(), new Cartesian3(),
+        ];
+        viewer.scene.primitives.add(farmModel);
+    } catch (e) {
+        console.error("[solar] 光伏阵列模型加载失败:", e);
+        appendSystemLog("光伏阵列模型加载失败，场景仅剩标记点");
+    }
+    console.info(`[solar] 阵列模型矩阵校正：farm=${farmMode}`);
 
-        // 风险等级着色标记（机位上方，标签写机位名称）
-        const color = RISK_COLOR[t.riskLevel];
+    // 3. 场景标记：只标 7 个区标签 + 逆变器 + 异常组串；
+    // 84 个组串检查点不全标（这正是痛点），靠 navigate 高亮定位具体组串
+    interface SolarTarget { kind: "inverter" | "string"; id: string; label: string; offset: SolarOffset }
+    const markerToTarget = new Map<Entity, SolarTarget>();
+
+    // 区标签：组团中心 = 该 zone 全部组串 offset 质心，标签架在阵列上方
+    const zoneAcc = new Map<string, { e: number; n: number; c: number }>();
+    for (const s of solarFixture.strings) {
+        const a = zoneAcc.get(s.zone) ?? { e: 0, n: 0, c: 0 };
+        a.e += s.offset.east; a.n += s.offset.north; a.c += 1;
+        zoneAcc.set(s.zone, a);
+    }
+    for (const [zone, a] of [...zoneAcc.entries()].sort()) {
+        viewer.entities.add({
+            position: localToWorld(a.e / a.c, a.n / a.c, 16),
+            point: {
+                pixelSize: 7, color: Color.fromCssColorString("#43c9e8"),
+                outlineColor: Color.WHITE, outlineWidth: 1.5,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+            label: {
+                text: `${zone} 区`,
+                font: "bold 15px system-ui",
+                fillColor: Color.WHITE,
+                showBackground: true,
+                backgroundColor: Color.fromCssColorString("#155a75").withAlpha(0.65),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+        });
+    }
+
+    // 逆变器标记（风险等级着色，点击弹信息卡）
+    for (const inv of solarFixture.inverters) {
+        const color = RISK_COLOR[inv.riskLevel ?? "normal"];
         const marker = viewer.entities.add({
-            position: localToWorld(t.offset.east, t.offset.north, t.offset.up + 140),
+            position: localToWorld(inv.offset.east, inv.offset.north, inv.offset.up + 4),
             point: {
                 pixelSize: 11, color,
                 outlineColor: Color.WHITE, outlineWidth: 2,
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
             },
             label: {
-                text: t.label,
+                text: inv.label,
                 font: "13px system-ui",
                 fillColor: Color.WHITE,
                 showBackground: true,
@@ -490,43 +523,79 @@ async function main() {
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
             },
         });
-        markerToTurbine.set(marker, t);
+        markerToTarget.set(marker, { kind: "inverter", id: inv.id, label: inv.label, offset: inv.offset });
     }
 
-    // 4. 人物（数字运维员）+ 山体碰撞
+    // 异常组串标记（醒目异常样式：红色钉 + 地面警示圈）
+    const anomalyString = solarFixture.demoAnomaly
+        ? solarFixture.strings.find((s) => s.id === solarFixture.demoAnomaly!.targetStringId)
+        : undefined;
+    if (anomalyString) {
+        const marker = viewer.entities.add({
+            position: localToWorld(anomalyString.offset.east, anomalyString.offset.north, anomalyString.offset.up + 8),
+            point: {
+                pixelSize: 13, color: Color.RED,
+                outlineColor: Color.WHITE, outlineWidth: 2,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+            label: {
+                text: `${anomalyString.label} · 异常`,
+                font: "bold 13px system-ui",
+                fillColor: Color.WHITE,
+                showBackground: true,
+                backgroundColor: Color.RED.withAlpha(0.7),
+                pixelOffset: new Cartesian2(0, -20),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+        });
+        markerToTarget.set(marker, { kind: "string", id: anomalyString.id, label: anomalyString.label, offset: anomalyString.offset });
+        viewer.entities.add({
+            position: localToWorld(anomalyString.offset.east, anomalyString.offset.north, anomalyString.offset.up),
+            ellipse: {
+                semiMajorAxis: 7,
+                semiMinorAxis: 7,
+                height: absHeight(anomalyString.offset.up + 0.3),
+                material: Color.RED.withAlpha(0.18),
+                outline: true,
+                outlineColor: Color.RED,
+            },
+        });
+    }
+
+    // 4. 人物（数字运维员）+ 平地碰撞
     //
-    // 3D Tiles 运行时对 glTF 内容会多应用一层 Y-up→Z-up 旋转（山体 tileset.json 未声明
-    // CESIUM_z_up / gltfUpAxis，默认 Y-up），而碰撞管线把 modelMatrix 直接作用在原始顶点上，
-    // 因此碰撞矩阵 = colliderModelMatrix × RotX(+90°)，与视觉严格对齐。
-    const yUpToZUp = Matrix4.fromRotationTranslation(
-        Matrix3.fromRotationX(CMath.PI_OVER_TWO), Cartesian3.ZERO, new Matrix4());
-    const colliderMatrix = Matrix4.multiply(
-        Matrix4.fromColumnMajorArray(farm.assets.mountain.colliderModelMatrix, new Matrix4()),
-        yUpToZUp, new Matrix4());
+    // 光伏场站是平地（模型地面 = 局部 y=0 平面）：不用阵列模型的三角网碰撞，
+    // 改用一张 ±250m 的 quad glb（solar/ground.glb，仅 2 个三角形）贴地，简单可靠。
+    // 碰撞管线把 modelMatrix 直接作用在原始顶点上，而渲染管线对 glTF 内容自带 Y-up→Z-up
+    // 旋转，因此碰撞矩阵 = 模型矩阵 × RotX(+90°)（与水电场景同一约定）。
+    // 调试参数 ?collider=raw|px|nx 可切换：raw=不校正，px=RotX(+90°)（默认），nx=RotX(-90°)。
+    const colliderMode = new URLSearchParams(location.search).get("collider") ?? "px";
+    const colliderMatrix = colliderMode === "raw" ? Matrix4.clone(farmFrame, new Matrix4())
+        : Matrix4.multiply(farmFrame, rotX(colliderMode === "nx" ? -CMath.PI_OVER_TWO : CMath.PI_OVER_TWO), new Matrix4());
     const colliderArr = Matrix4.toArray(colliderMatrix); // 列主序 16 元素
 
-    const opsOffset = farm.opsPoint.offset;
+    const opsOffset = solarFixture.opsPoint.offset;
     const spawn = localToWorld(opsOffset.east, opsOffset.north, opsOffset.up + 3); // 抬高 3m 让物理落地
 
     const player = new playerController();
-    let colliderDesc = "山体 glTF 三角网（含 Y-up→Z-up 校正）";
-    const gltfCollider: ColliderSource = {
+    let colliderDesc = `平地 quad（collider=${colliderMode}）`;
+    const staticColliders: ColliderSource[] = [{
         type: "gltf",
-        url: `${BASE}${farm.assets.mountain.gltfUrl}`,
+        url: `${BASE}solar/ground.glb`,
         modelMatrix: colliderArr,
-    };
+    }];
     await player.init({
         viewer,
         initPos: spawn,
-        minCamDistance: 50,
-        maxCamDistance: 300,
+        minCamDistance: 8,
+        maxCamDistance: 200,
         camLookAtHeightRatio: 0.7,
         enableSpringCamera: true,
         springCameraTime: 0.07,
         thirdMouseMode: 2, // 拖拽旋转、不锁定指针，保证 HUD 输入框可用
         playerModelConfig: {
-            url: `${BASE}${farm.assets.player.glbUrl}`,
-            scale: farm.assets.player.scale,
+            url: `${BASE}${solarFixture.assets.player.glbUrl}`,
+            scale: solarFixture.assets.player.scale,
             idleAnim: "Idle_Loop",
             walkAnim: "Walk_Loop",
             runAnim: "Sprint_Loop",
@@ -541,44 +610,18 @@ async function main() {
             rotateY: -Math.PI / 2,
             facingOffset: Math.PI / 2,
         },
-        staticCollider: [gltfCollider],
+        staticCollider: staticColliders,
     });
-    player.setJumpHeight(900);
     player.setPlayerSpeed(500); // ×0.01 → 步行约 5 m/s（手动 WASD）
-    player.setPlayerFlySpeed(3000); // ×0.01 → 飞行约 30 m/s
 
-    // 库内对失败碰撞源是 allSettled 跳过（不抛错），这里实际校验碰撞体数量；
-    // gltf 碰撞缺失时退化为原点周围椭球面兜底。
+    // 库内对失败碰撞源是 allSettled 跳过（不抛错），这里实际校验碰撞体数量
     const colliderCount = (player.physics as unknown as { staticColliders?: unknown[] }).staticColliders?.length ?? 0;
     if (colliderCount === 0) {
-        console.warn("山体 glTF 碰撞体未建成，退化为椭球面地形兜底");
-        const half = 0.01;
-        try {
-            await player.physics.addStaticColliders(viewer, {
-                type: "terrain",
-                rectangle: [
-                    CMath.toRadians(origin.lon - half), CMath.toRadians(origin.lat - half),
-                    CMath.toRadians(origin.lon + half), CMath.toRadians(origin.lat + half),
-                ],
-                resolution: 32,
-            });
-            colliderDesc = "椭球面地形兜底（山体 glTF 碰撞加载失败）";
-        } catch (e) {
-            console.error("兜底地形碰撞也失败:", e);
-            colliderDesc = "碰撞不可用（仅动画/运动演示）";
-        }
+        console.error("[solar] 平地 quad 碰撞体未建成，人物无地面支撑");
+        appendSystemLog("地面碰撞加载失败，人物可能无法站立");
+        colliderDesc = "碰撞不可用（仅动画/运动演示）";
     }
-    console.info(`[wind] 碰撞：${colliderDesc}`);
-
-    // 3b. GPU 粒子风场流线（移植自黔风智维；局部 ENU 模型采样成 lon/lat 纹理交给 GPU 积分渲染）
-    // 常开，不提供开关
-    createWindFieldLayer({
-        viewer,
-        localFrame,
-        origin: { longitude: origin.lon, latitude: origin.lat, height: origin.heightM },
-        config: WIND_FIELD_CONFIG,
-        reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    });
+    console.info(`[solar] 碰撞：${colliderDesc}`);
 
     // 第一人称时隐藏人物模型
     player.onViewChange = (isFirstPerson) => {
@@ -600,6 +643,7 @@ async function main() {
     let pathEntities: Entity[] = [];
     let focusRing: Entity | null = null;
     let bearingMarker: Entity | null = null;
+    let cpHighlight: Entity | null = null;
 
     const zeroInput = () => player.setInput({ moveX: 0, moveY: 0, jump: false, shift: false });
     const playerLocal = () => worldToLocal(player.getPosition());
@@ -611,17 +655,15 @@ async function main() {
         player.addYaw(diff * Math.min(1, 10 * dt));
     }
 
-    // 采样 (x,y) 处真实地形的站立高度（胶囊中心 local z）；射线未命中回退 fallback。
-    // fixture 里的 up 只是登记值，与山体网格真实高程可能差上百米（运维点实测差 ~180m），
-    // 因此射线窗口不围绕 fallback，而是覆盖全高程范围（±500m）。
+    // 采样 (x,y) 处地面的站立高度（胶囊中心 local z）；平地 quad 必然命中，未命中回退 fallback。
     function terrainStandZ(x: number, y: number, fallback: number): number {
-        const top = localToWorld(x, y, 500);
-        const bottom = localToWorld(x, y, -500);
+        const top = localToWorld(x, y, 100);
+        const bottom = localToWorld(x, y, -100);
         const dir = Cartesian3.subtract(bottom, top, new Cartesian3());
         Cartesian3.normalize(dir, dir);
-        const d = player.physics.raycastEcef(top, dir, 1000);
+        const d = player.physics.raycastEcef(top, dir, 200);
         if (!Number.isFinite(d)) return fallback;
-        return 500 - d + player.getCapsuleGroundHeight();
+        return 100 - d + player.getCapsuleGroundHeight();
     }
 
     function clearPath() {
@@ -634,6 +676,9 @@ async function main() {
     function clearBearingMarker() {
         if (bearingMarker) { viewer.entities.remove(bearingMarker); bearingMarker = null; }
     }
+    function clearCheckpointHighlight() {
+        if (cpHighlight) { viewer.entities.remove(cpHighlight); cpHighlight = null; }
+    }
 
     // ---------- 场景截图 ----------
 
@@ -643,16 +688,106 @@ async function main() {
     function captureSceneShot(): void {
         viewer.scene.render();
         viewer.scene.canvas.toBlob((blob) => {
-            if (!blob) { console.warn("[wind] 截图失败：canvas.toBlob 返回空"); return; }
+            if (!blob) { console.warn("[solar] 截图失败：canvas.toBlob 返回空"); return; }
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
-            a.download = `xunjie-wind-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
+            a.download = `xunjie-solar-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
             a.click();
             setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-            console.info(`[wind] 场景截图已下载：${a.download}`);
+            console.info(`[solar] 场景截图已下载：${a.download}`);
         }, "image/png");
     }
     (window as unknown as { xunjieCapture?: () => void }).xunjieCapture = captureSceneShot;
+
+    // 调试钩子（不入 UI，标定/联调用）：__xjCam(e,n,u,headingDeg,pitchDeg) 切自由视角；__xjLocal() 读人物局部 ENU
+    (window as unknown as { __xjCam?: (e: number, n: number, u: number, hDeg?: number, pDeg?: number) => void }).__xjCam =
+        (e, n, u, hDeg = 0, pDeg = -90) => {
+            cameraOverride = true;
+            viewer.camera.setView({
+                destination: localToWorld(e, n, u),
+                orientation: { heading: CMath.toRadians(hDeg), pitch: CMath.toRadians(pDeg), roll: 0 },
+            });
+        };
+    (window as unknown as { __xjLocal?: () => { e: number; n: number; u: number } }).__xjLocal = () => {
+        const p = playerLocal();
+        return { e: Math.round(p.x * 10) / 10, n: Math.round(p.y * 10) / 10, u: Math.round(p.z * 10) / 10 };
+    };
+    // 标定用：局部 (e,n) 处的碰撞地面高度（射线未命中返回 null）
+    (window as unknown as { __xjGround?: (e: number, n: number) => number | null }).__xjGround = (e, n) => {
+        const top = localToWorld(e, n, 200);
+        const bottom = localToWorld(e, n, -200);
+        const dir = Cartesian3.subtract(bottom, top, new Cartesian3());
+        Cartesian3.normalize(dir, dir);
+        const d = player.physics.raycastEcef(top, dir, 400);
+        return Number.isFinite(d) ? Math.round((200 - d) * 10) / 10 : null;
+    };
+    // 标定用：视觉真值扫描——顶视相机 + 深度缓冲 pickPosition，测的是渲染出来的模型表面（而非碰撞体）
+    (window as unknown as { __xjVisualScan?: (e0: number, n0: number, span: number, alt: number) => (number | null)[][] }).__xjVisualScan =
+        (e0, n0, span, alt) => {
+            cameraOverride = true;
+            viewer.camera.setView({
+                destination: localToWorld(e0, n0, alt),
+                orientation: { heading: 0, pitch: CMath.toRadians(-89.9), roll: 0 },
+            });
+            viewer.scene.render();
+            const canvas = viewer.scene.canvas;
+            const W = canvas.width, H = canvas.height;
+            const N = 21;
+            const out: (number | null)[][] = [];
+            for (let r = 0; r < N; r++) {
+                const row: (number | null)[] = [];
+                for (let c = 0; c < N; c++) {
+                    const wx = Math.floor((c + 0.5) * W / N);
+                    const wy = Math.floor((r + 0.5) * H / N);
+                    let v: number | null = null;
+                    try {
+                        const p = viewer.scene.pickPosition(new Cartesian2(wx, wy));
+                        if (p) {
+                            const l = worldToLocal(p);
+                            v = Math.round(l.z * 10) / 10;
+                        }
+                    } catch { v = null; }
+                    row.push(v);
+                }
+                out.push(row);
+            }
+            return out;
+        };
+    // 标定用：把人物瞬移到局部 (e,n,u+2)，让物理自然落地，第三人称截图直接验证碰撞/视觉一致性
+    (window as unknown as { __xjTeleport?: (e: number, n: number, u: number) => void }).__xjTeleport = (e, n, u) => {
+        executor.interrupt();
+        player.reset(localToWorld(e, n, u + 2));
+    };
+    // 标定用：在局部坐标放一个测试钉
+    (window as unknown as { __xjMark?: (e: number, n: number, u: number, label?: string) => void }).__xjMark = (e, n, u, label = `${e},${n}`) => {
+        viewer.entities.add({
+            position: localToWorld(e, n, u),
+            point: { pixelSize: 9, color: Color.CYAN, outlineColor: Color.BLACK, outlineWidth: 1, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+            label: { text: label, font: "12px monospace", fillColor: Color.CYAN, pixelOffset: new Cartesian2(0, -14), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+        });
+    };
+    // 标定用：读阵列模型包围球（局部 ENU 中心 + 半径），定位轴向/平移问题
+    (window as unknown as { __xjFarmInfo?: () => { e: number; n: number; u: number; radius: number } | null }).__xjFarmInfo = () => {
+        if (!farmModel) return null;
+        const c = worldToLocal(farmModel.boundingSphere.center);
+        return {
+            e: Math.round(c.x * 10) / 10, n: Math.round(c.y * 10) / 10,
+            u: Math.round(c.z * 10) / 10, radius: Math.round(farmModel.boundingSphere.radius * 10) / 10,
+        };
+    };
+    // 标定用：在线切换阵列模型矩阵校正（raw/px/nx/fx，与 ?farm= 参数同义）
+    (window as unknown as { __xjFarm?: (mode: "raw" | "px" | "nx" | "fx") => void }).__xjFarm = (mode) => {
+        if (!farmModel) return;
+        farmModel.modelMatrix = farmMatrixOf(mode);
+        console.info(`[solar] 阵列模型矩阵校正切换：farm=${mode}`);
+    };
+    // 标定用：手动给某个 CP-STR-* 检查点挂定位高亮（验证「快速找到某块光伏板」样式）
+    (window as unknown as { __xjHighlight?: (cpId: string) => boolean }).__xjHighlight = (cpId) => {
+        const cp = solarFixture.checkpoints.find((c) => c.id === cpId);
+        if (!cp) return false;
+        addCheckpointHighlight(cp);
+        return true;
+    };
 
     // 截图是指令流里的瞬时动作：入队即执行，不阻塞后续命令
     function makeCaptureScene(): Action {
@@ -668,12 +803,11 @@ async function main() {
 
     // 脉冲半径：每帧只算一次（两个 CallbackProperty 各自取 Date.now() 会有毫秒差，
     // 偶发 semiMajor < semiMinor 直接抛 DeveloperError 停掉渲染，E2E 实测踩到过）
-    let ringRadius = 14;
+    let ringRadius = 6;
     let bearingRadius = 6;
 
-    function addFocusRing(t: FarmTurbine) {
+    function addFocusRing(t: SolarTarget, baseColor: Color) {
         clearFocusRing();
-        const baseColor = RISK_COLOR[t.riskLevel];
         focusRing = viewer.entities.add({
             position: localToWorld(t.offset.east, t.offset.north, t.offset.up),
             ellipse: {
@@ -687,11 +821,11 @@ async function main() {
         });
     }
 
-    function addBearingPulse(t: FarmTurbine, componentLabel: string) {
+    function addBearingPulse(t: SolarTarget, componentLabel: string) {
         clearBearingMarker();
-        // 机舱位置（机位 up + 约 125m）
+        // 组串平台上方，标记贴近设备即可
         bearingMarker = viewer.entities.add({
-            position: localToWorld(t.offset.east, t.offset.north, t.offset.up + 125),
+            position: localToWorld(t.offset.east, t.offset.north, t.offset.up + 6),
             ellipsoid: {
                 radii: new CallbackProperty(() => new Cartesian3(bearingRadius, bearingRadius, bearingRadius), false),
                 material: Color.RED.withAlpha(0.6),
@@ -710,19 +844,51 @@ async function main() {
         });
     }
 
-    // ---------- 动作：导航 ----------
-
-    function resolveNavTarget(targetId?: string): FarmOffset | null {
-        if (!targetId) return null;
-        if (targetId === farm.opsPoint.id) return farm.opsPoint.offset;
-        const t = farm.turbines.find((x) => x.checkpointId === targetId || x.id === targetId);
-        return t ? t.offset : null;
+    // 组串定位高亮：navigate 到 CP-STR-* 检查点时，在该组串位置画醒目半透明盒（5×3×5m）+ 名称标签。
+    // 核心痛点功能「快速找到某块光伏板」；下一个 navigate（executor.interrupt）或维修完成后清除。
+    function addCheckpointHighlight(cp: SolarCheckpoint) {
+        clearCheckpointHighlight();
+        const str = solarFixture.strings.find((s) => s.id === cp.stringId);
+        cpHighlight = viewer.entities.add({
+            position: localToWorld(cp.offset.east, cp.offset.north, cp.offset.up + 1.5),
+            box: {
+                dimensions: new Cartesian3(5, 3, 5),
+                material: Color.ORANGE.withAlpha(0.35),
+                outline: true,
+                outlineColor: Color.WHITE,
+            },
+            label: {
+                text: str ? `${str.label} · ${cp.id}` : cp.id,
+                font: "bold 13px system-ui",
+                fillColor: Color.WHITE,
+                showBackground: true,
+                backgroundColor: Color.ORANGE.withAlpha(0.75),
+                pixelOffset: new Cartesian2(0, -30),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+        });
+        console.info(`[solar] 组串定位高亮：${cp.id}${str ? `（${str.label}）` : ""}`);
     }
 
-    // 地面 walk/run：水平纯插值 reset + 竖直逐帧射线贴真实地形，不喂输入——
+    // ---------- 动作：导航 ----------
+
+    interface NavTarget { offset: SolarOffset; cp?: SolarCheckpoint }
+    function resolveNavTarget(targetId?: string): NavTarget | null {
+        if (!targetId) return null;
+        if (targetId === solarFixture.opsPoint.id) return { offset: solarFixture.opsPoint.offset };
+        const inv = solarFixture.inverters.find((x) => x.checkpointId === targetId || x.id === targetId);
+        if (inv) return { offset: inv.offset };
+        const str = solarFixture.strings.find((x) => x.id === targetId);
+        if (str) return { offset: str.offset };
+        const cp = solarFixture.checkpoints.find((x) => x.id === targetId);
+        if (cp) return { offset: cp.offset, cp };
+        return null;
+    }
+
+    // 地面 walk/run：水平纯插值 reset + 竖直逐帧射线贴地（平地 quad 必命中），不喂输入——
     // 否则控制器的速度/重力/地面吸附每帧和 reset 打架，表现为移动时上下抖动。
     // 动画由 setScriptedAnimation 覆盖（无按键输入时控制器每帧会切回 idle）
-    function makeGroundNavigate(target: FarmOffset, movement: "walk" | "run"): Action {
+    function makeGroundNavigate(target: SolarOffset, movement: "walk" | "run"): Action {
         const speed = SPEED[movement];
         const start = playerLocal().clone();
         const end = new Cartesian3(target.east, target.north, target.up);
@@ -747,84 +913,32 @@ async function main() {
         };
     }
 
-    // 飞行 fly：三段式（抬升 40m → 水平巡航 → 下降到目标 up+2）
-    function makeFlyNavigate(target: FarmOffset): Action {
-        const start = playerLocal().clone();
-        const cruise = Math.max(start.z + 40, target.up + 42);
-        const pts = [
-            new Cartesian3(start.x, start.y, start.z),
-            new Cartesian3(start.x, start.y, cruise),
-            new Cartesian3(target.east, target.north, cruise),
-            new Cartesian3(target.east, target.north, target.up + 2),
-        ];
-        let seg = 0;
-        let s = 0;
-        // 语言指令不切换人物形态：纯插值 reset 送达，不喂输入——
-        // 否则控制器每帧还会叠加自身的速度/重力解算，与 reset 打架造成抬升段抖动。
-        // 动画按航段经 setScriptedAnimation 覆盖（优先级高于控制器按键动画，结束/中断时清除）。
-        const scriptedAnim = () => {
-            player.setScriptedAnimation(
-                seg === 0 ? "flyHoverUp" : seg >= pts.length - 2 ? "flyidle" : "flyHoverForward",
-            );
-        };
-        scriptedAnim();
-        return {
-            update(dt) {
-                let done = false;
-                while (seg < pts.length - 1) {
-                    const a = pts[seg];
-                    const b = pts[seg + 1];
-                    const segLen = Cartesian3.distance(a, b);
-                    const step = SPEED.fly * dt;
-                    if (segLen < 1e-6 || segLen - s <= step) {
-                        player.reset(localToWorld(b.x, b.y, b.z));
-                        seg += 1;
-                        s = 0;
-                        if (seg >= pts.length - 1) { done = true; break; }
-                        continue;
-                    }
-                    s += step;
-                    const p = Cartesian3.lerp(a, b, s / segLen, new Cartesian3());
-                    player.reset(localToWorld(p.x, p.y, p.z));
-                    scriptedAnim();
-                    // 朝向对准目标水平方向（抬升/巡航段均适用）
-                    const cur = playerLocal();
-                    faceTowards(target.east - cur.x, target.north - cur.y, dt);
-                    break;
-                }
-                const cur = playerLocal();
-                const horizontal = Math.hypot(cur.x - target.east, cur.y - target.north);
-                const vertical = Math.abs(cur.z - (target.up + 2));
-                done = done || (seg >= pts.length - 1) || (horizontal <= 2 && vertical <= 4);
-                if (done) {
-                    zeroInput();
-                    clearPath();
-                    player.setScriptedAnimation(null);
-                    return true;
-                }
-                return false;
-            },
-            cancel() {
-                zeroInput();
-                clearPath();
-                player.setScriptedAnimation(null);
-            },
-        };
-    }
-
     function makeNavigate(cmd: AvatarCommand): Action | null {
         const target = resolveNavTarget(cmd.targetId);
         if (!target) {
             appendSystemLog(`导航目标未登记：${cmd.targetId ?? "(空)"}，已跳过（不猜测坐标）`);
             return null;
         }
-        return cmd.movement === "fly" ? makeFlyNavigate(target) : makeGroundNavigate(target, cmd.movement ?? "walk");
+        // 目标是 CP-STR-* 组串检查点：挂定位高亮（下一次 navigate / 维修完成时清除）
+        if (target.cp?.stringId) addCheckpointHighlight(target.cp);
+        // fly 指令降级为地面跑（平地场景不留空中悬停）
+        const movement: "walk" | "run" = cmd.movement === "walk" ? "walk" : "run";
+        return makeGroundNavigate(target.offset, movement);
     }
 
     // ---------- 动作：聚焦设备 ----------
 
-    // 风机信息卡：折进对话流（卡片气泡），不再用右侧悬浮卡
-    function showAssetCard(t: FarmTurbine) {
+    function resolveSolarTarget(targetId?: string): SolarTarget | null {
+        if (!targetId) return null;
+        const inv = solarFixture.inverters.find((x) => x.id === targetId || x.checkpointId === targetId);
+        if (inv) return { kind: "inverter", id: inv.id, label: inv.label, offset: inv.offset };
+        const str = solarFixture.strings.find((x) => x.id === targetId);
+        if (str) return { kind: "string", id: str.id, label: str.label, offset: str.offset };
+        return null;
+    }
+
+    // 设备信息卡：折进对话流（卡片气泡），不再用右侧悬浮卡
+    function showAssetCard(t: SolarTarget) {
         const row = document.createElement("div");
         row.className = "ai-msg bot";
         const av = document.createElement("span");
@@ -838,16 +952,32 @@ async function main() {
         card.className = "ai-card";
         const title = document.createElement("div");
         title.className = "ai-card-title";
-        title.textContent = `风机信息 · ${t.label}（${RISK_LABEL[t.riskLevel]}）`;
+        title.textContent = `设备信息 · ${t.label}`;
         card.appendChild(title);
-        const rows: [string, string][] = [
-            ["ID", t.id],
-            ["风险等级", `${RISK_LABEL[t.riskLevel]}（${t.riskLevel}）`],
-            ["headingDeg", `${t.headingDeg}°`],
-            ["offset (E/N/U)", `${t.offset.east} / ${t.offset.north} / ${t.offset.up} m`],
-            ["checkpointId", t.checkpointId],
-            ["模型来源", farm.assets.turbine.credit],
-        ];
+
+        const rows: [string, string][] = [["ID", t.id]];
+        if (t.kind === "inverter") {
+            const inv = solarFixture.inverters.find((x) => x.id === t.id)!;
+            rows.push(
+                ["型号", inv.model ?? "—"],
+                ["额定功率", inv.ratedKw != null ? `${inv.ratedKw} kW` : "—"],
+                ["接入组串数", inv.stringCount != null ? `${inv.stringCount}` : "—"],
+                ["转换效率", inv.efficiency != null ? `${(inv.efficiency * 100).toFixed(1)}%` : "—"],
+                ["状态", inv.stateNote ?? RISK_LABEL[inv.riskLevel ?? "normal"]],
+                ["checkpointId", inv.checkpointId],
+            );
+        } else {
+            const str = solarFixture.strings.find((x) => x.id === t.id)!;
+            rows.push(
+                ["所属区", `${str.zone} 区 · ${str.no} 号`],
+                ["组件数", str.panelCount != null ? `${str.panelCount} 块` : "—"],
+                ["所属逆变器", str.inverterId],
+            );
+            if (solarFixture.demoAnomaly?.targetStringId === str.id) {
+                rows.push(["异常", solarFixture.demoAnomaly.suspected ?? solarFixture.demoAnomaly.type]);
+            }
+        }
+        rows.push(["offset (E/N/U)", `${t.offset.east} / ${t.offset.north} / ${t.offset.up} m`]);
         for (const [k, v] of rows) {
             const div = document.createElement("div");
             div.className = "ai-card-row";
@@ -880,30 +1010,25 @@ async function main() {
     }
 
     function makeFocusAsset(cmd: AvatarCommand): Action | null {
-        const t = farm.turbines.find((x) => x.id === cmd.targetId);
+        const t = resolveSolarTarget(cmd.targetId);
         if (!t) {
             appendSystemLog(`聚焦目标未登记：${cmd.targetId ?? "(空)"}，已跳过`);
             return null;
         }
         cameraOverride = true; // 释放第三人称跟随，让 flyTo 生效
-        const h = CMath.toRadians(t.headingDeg);
-        const nacelle = { e: t.offset.east, n: t.offset.north, u: t.offset.up + 125 };
-        // 机位前方 80m、上方 60m，看向机舱
-        const cam = {
-            e: nacelle.e + Math.sin(h) * 80,
-            n: nacelle.n + Math.cos(h) * 80,
-            u: nacelle.u + 60,
-        };
-        const de = nacelle.e - cam.e;
-        const dn = nacelle.n - cam.n;
-        const du = nacelle.u - cam.u;
+        // 目标南侧 22m、上方 13m，看向设备（阵列无朝向概念，统一从南侧看）
+        const cam = { e: t.offset.east, n: t.offset.north - 22, u: t.offset.up + 13 };
+        const dev = { e: t.offset.east, n: t.offset.north, u: t.offset.up + 2 };
+        const de = dev.e - cam.e;
+        const dn = dev.n - cam.n;
+        const du = dev.u - cam.u;
         const len = Math.hypot(de, dn, du);
         viewer.camera.flyTo({
             destination: localToWorld(cam.e, cam.n, cam.u),
             orientation: { heading: Math.atan2(de, dn), pitch: Math.asin(du / len), roll: 0 },
             duration: 1.6,
         });
-        addFocusRing(t);
+        addFocusRing(t, t.kind === "inverter" ? Color.YELLOW : Color.ORANGE);
         showAssetCard(t);
         return { update: () => true, cancel: () => undefined }; // 相机动作不阻塞后续命令
     }
@@ -911,7 +1036,7 @@ async function main() {
     // ---------- 动作：维修仿真 ----------
 
     // 维修记录卡：折进对话流（卡片气泡），不再是右侧悬浮卡
-    function showRepairRecord(target: FarmRepairTarget, t: FarmTurbine, stamps: { id: string; label: string; time: string }[]) {
+    function showRepairRecord(target: SolarRepairTarget, t: SolarTarget, stamps: { id: string; label: string; time: string }[]) {
         const doneAt = new Date().toLocaleString("zh-CN", { hour12: false });
         const row = document.createElement("div");
         row.className = "ai-msg bot";
@@ -961,20 +1086,20 @@ async function main() {
         row.appendChild(bubble);
         aiMsgs.appendChild(row);
         scrollAiToBottom();
-        console.info(`[wind] 维修仿真完成：${t.label} ${target.componentLabel}，记录卡已生成（SIMULATED）`);
+        console.info(`[solar] 维修仿真完成：${t.label} ${target.componentLabel}，记录卡已生成（SIMULATED）`);
     }
 
     function makeRepair(cmd: AvatarCommand): Action | null {
-        const target = farm.repairTargets.find((r) => r.targetId === cmd.targetId);
-        const turbine = farm.turbines.find((x) => x.id === cmd.targetId);
-        if (!target || !turbine) {
-            appendSystemLog(`维修目标未登记：${cmd.targetId ?? "(空)"}，已跳过（本场景仅登记 HS-WTG-07）`);
+        const target = solarFixture.repairTargets.find((r) => r.targetId === cmd.targetId);
+        const t = resolveSolarTarget(cmd.targetId);
+        if (!target || !t) {
+            appendSystemLog(`维修目标未登记：${cmd.targetId ?? "(空)"}，已跳过（本场景仅登记 STR-B2-07 · B 区 7 号组串）`);
             return null;
         }
-        // 若人物不在 checkpoint 5m 内，先自动 fly navigate 过去
-        const cp = new Cartesian3(turbine.offset.east, turbine.offset.north, turbine.offset.up);
+        // 若人物不在 checkpoint 5m 内，先自动跑步导航过去
+        const cp = new Cartesian3(t.offset.east, t.offset.north, t.offset.up);
         const needNav = Cartesian3.distance(playerLocal(), cp) > 5;
-        let navAction: Action | null = needNav ? makeFlyNavigate(turbine.offset) : null;
+        let navAction: Action | null = needNav ? makeGroundNavigate(t.offset, "run") : null;
 
         const stamps: { id: string; label: string; time: string }[] = [];
         let stepIdx = -1;
@@ -988,7 +1113,7 @@ async function main() {
                 }
                 if (!started) {
                     started = true;
-                    console.info(`[wind] 维修仿真开始：${turbine.label} · ${target.componentLabel}（SIMULATED）`);
+                    console.info(`[solar] 维修仿真开始：${t.label} · ${target.componentLabel}（SIMULATED）`);
                 }
                 stepTimer += dt;
                 if (stepIdx === -1 || stepTimer >= 1.2) {
@@ -996,63 +1121,62 @@ async function main() {
                     stepTimer = 0;
                     if (stepIdx >= target.steps.length) {
                         clearBearingMarker();
-                        showRepairRecord(target, turbine, stamps);
+                        clearCheckpointHighlight(); // 维修完成，撤掉组串定位高亮
+                        showRepairRecord(target, t, stamps);
                         return true;
                     }
                     const step = target.steps[stepIdx];
                     const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
                     stamps.push({ id: step.id, label: step.label, time });
                     // 步骤留痕只进 console 与最终维修记录卡，不再刷对话消息流
-                    console.info(`[wind] 维修步骤 ${step.id}：${step.label}（SIMULATED）`);
-                    if (step.id === "RS-3") addBearingPulse(turbine, target.componentLabel);
+                    console.info(`[solar] 维修步骤 ${step.id}：${step.label}（SIMULATED）`);
+                    if (step.id === "RS-3") addBearingPulse(t, target.componentLabel);
                 }
                 return false;
             },
             cancel() {
                 navAction?.cancel();
                 clearBearingMarker();
-                console.info("[wind] 维修仿真已中断");
+                console.info("[solar] 维修仿真已中断");
             },
         };
     }
 
-    // ---------- 动作：相对移动 / 转向 / 跳跃 / 停止 ----------
+    // ---------- 动作：相对移动 / 转向 / 停止 ----------
 
-    function makeMoveRelative(cmd: AvatarCommand): Action {
+    function makeMoveRelative(cmd: AvatarCommand): Action | null {
         const dir = cmd.direction ?? "forward";
+        if (dir === "up" || dir === "down") {
+            appendSystemLog("光伏场景为平地巡检，竖直移动已禁用，已跳过");
+            return null;
+        }
         const meters = Math.max(1, Math.min(2000, cmd.distanceMeters ?? 10));
-        const movement: AvatarMovement = cmd.movement ?? (dir === "up" || dir === "down" ? "fly" : "walk");
+        const movement: AvatarMovement = cmd.movement === "run" ? "run" : "walk";
         const start = playerLocal().clone();
         const yaw = player.getYaw();
-        const v = { e: 0, n: 0, u: 0 };
+        const v = { e: 0, n: 0 };
         switch (dir) {
             case "forward": v.e = Math.sin(yaw); v.n = Math.cos(yaw); break;
             case "backward": v.e = -Math.sin(yaw); v.n = -Math.cos(yaw); break;
             case "left": v.e = -Math.cos(yaw); v.n = Math.sin(yaw); break; // 人物真左侧：forward=(sin,cos) 的左法向
             case "right": v.e = Math.cos(yaw); v.n = -Math.sin(yaw); break;
-            case "up": v.u = 1; break;
-            case "down": v.u = -1; break;
         }
-        const end = new Cartesian3(start.x + v.e * meters, start.y + v.n * meters, start.z + v.u * meters);
+        const end = new Cartesian3(start.x + v.e * meters, start.y + v.n * meters, start.z);
         const total = Math.max(1e-6, Cartesian3.distance(start, end));
-        const horizontal = Math.hypot(v.e, v.n) > 0.1;
-        // 语言指令不切换人物形态（walk/fly 模式只由用户手动 F 切换）；位移由逐帧 reset 送达，不喂输入——
+        // 语言指令不切换人物形态；位移由逐帧 reset 送达，不喂输入——
         // 输入会让控制器按相机朝向叠加自身移动，与 reset 打架造成抖动。
-        // 水平位移贴真实地形（射线采样），竖直位移纯插值；动画脚本覆盖。
-        const animKey = dir === "up" ? "flyHoverUp" : dir === "down" ? "flyidle"
-            : movement === "run" ? "running" : movement === "fly" ? "flyHoverForward" : "walking";
+        // 水平位移贴地（射线采样），动画脚本覆盖。
         let s = 0;
-        player.setScriptedAnimation(animKey);
+        player.setScriptedAnimation(movement === "run" ? "running" : "walking");
         return {
             update(dt) {
                 s += SPEED[movement] * dt;
                 const t = Math.min(1, s / total);
                 const x = start.x + (end.x - start.x) * t;
                 const y = start.y + (end.y - start.y) * t;
-                const zFallback = start.z + (end.z - start.z) * t;
-                const z = horizontal ? terrainStandZ(x, y, zFallback) : zFallback;
+                const z = terrainStandZ(x, y, start.z);
                 player.reset(localToWorld(x, y, z));
-                if (horizontal) faceTowards(v.e, v.n, dt);
+                faceTowards(v.e, v.n, dt);
                 if (t >= 1) {
                     zeroInput();
                     clearPath();
@@ -1124,7 +1248,7 @@ async function main() {
             case "stop": return { update: () => true, cancel: () => undefined }; // push 时已中断
             case "capture_scene": return makeCaptureScene(); // 后端约定的截图指令（合同对齐中）
             default:
-                appendSystemLog(`命令 ${cmd.kind} 不属于风电场景登记范围，已跳过`);
+                appendSystemLog(`命令 ${cmd.kind} 不属于光伏场景登记范围，已跳过`);
                 return null;
         }
     }
@@ -1144,6 +1268,7 @@ async function main() {
             clearPath();
             clearFocusRing();
             clearBearingMarker();
+            clearCheckpointHighlight();
             cameraOverride = false; // 恢复第三人称跟随
         },
         tick(dt: number) {
@@ -1201,18 +1326,18 @@ async function main() {
         warnings?: string[];
     }) {
         // planner / trace / outcomes 等元数据不上气泡（气泡只留 reply + 命令 chips），写 console 留底
-        if (opts.plannerMode) console.info(`[wind] planner=${opts.plannerMode}`);
+        if (opts.plannerMode) console.info(`[solar] planner=${opts.plannerMode}`);
         if (opts.trace?.length) {
-            console.info(`[wind] trace ${opts.trace.length} 步：${opts.trace.map((s) => `${s.label}·${s.status}·${s.durationMs}ms`).join(" → ")}`);
+            console.info(`[solar] trace ${opts.trace.length} 步：${opts.trace.map((s) => `${s.label}·${s.status}·${s.durationMs}ms`).join(" → ")}`);
         }
         if (opts.outcomes?.length) {
-            console.info(`[wind] 服务端编排：${opts.outcomes.map((o) => `${DISPATCH_LABEL[o.kind] ?? o.kind}:${o.status}`).join("，")}`);
+            console.info(`[solar] 服务端编排：${opts.outcomes.map((o) => `${DISPATCH_LABEL[o.kind] ?? o.kind}:${o.status}`).join("，")}`);
         }
         if (opts.mission?.missionId) {
-            console.info(`[wind] 任务 ${opts.mission.missionId} · 阶段 ${opts.mission.phase ?? "未知"}`);
+            console.info(`[solar] 任务 ${opts.mission.missionId} · 阶段 ${opts.mission.phase ?? "未知"}`);
         }
-        if (opts.examples?.length) console.info(`[wind] 示例：${opts.examples.join(" / ")}`);
-        if (opts.warnings?.length) console.warn(`[wind] ${opts.warnings.join("；")}`);
+        if (opts.examples?.length) console.info(`[solar] 示例：${opts.examples.join(" / ")}`);
+        if (opts.warnings?.length) console.warn(`[solar] ${opts.warnings.join("；")}`);
 
         const row = document.createElement("div");
         row.className = "ai-msg bot";
@@ -1250,8 +1375,8 @@ async function main() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     text,
-                    sceneId: farm.sceneId,
-                    sceneRevision: farm.sceneRevision,
+                    sceneId: solarFixture.sceneId,
+                    sceneRevision: solarFixture.sceneRevision,
                     conversationId: CONVERSATION_ID,
                 }),
             });
@@ -1411,16 +1536,18 @@ async function main() {
         });
     });
 
-    // ==================== 点击风机弹信息卡（气泡） ====================
+    // ==================== 点击设备标记弹信息卡（气泡） ====================
 
     const pickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     pickHandler.setInputAction((e: ScreenSpaceEventHandler.PositionedEvent) => {
         const picked = viewer.scene.pick(e.position) as { primitive?: unknown; id?: unknown } | undefined;
         if (!picked) return;
-        let t: FarmTurbine | undefined;
-        if (picked.primitive instanceof Model) t = modelToTurbine.get(picked.primitive);
-        if (!t && picked.id instanceof Entity) t = markerToTurbine.get(picked.id);
-        if (t) { addFocusRing(t); showAssetCard(t); }
+        let t: SolarTarget | undefined;
+        if (picked.id instanceof Entity) t = markerToTarget.get(picked.id);
+        if (t) {
+            addFocusRing(t, t.kind === "inverter" ? Color.YELLOW : Color.ORANGE);
+            showAssetCard(t);
+        }
     }, ScreenSpaceEventType.LEFT_CLICK);
 
     // ==================== 主循环 ====================
@@ -1432,13 +1559,13 @@ async function main() {
         const dt = Math.min(0.05, Math.max(0.001, (now - lastTick) / 1000));
         lastTick = now;
         // 脉冲高亮动画（每帧单点计算，供两个 CallbackProperty 读取）
-        ringRadius = 14 + 5 * (0.5 + 0.5 * Math.sin(now / 280));
+        ringRadius = 6 + 2 * (0.5 + 0.5 * Math.sin(now / 280));
         bearingRadius = 6 + 3 * (0.5 + 0.5 * Math.sin(now / 240));
         executor.tick(dt);
     });
 
-    console.info(`[wind] 场景就绪：${farm.name}（${farm.sceneId}@${farm.sceneRevision}），10 台风机已登记`);
-    console.info("[wind] 键位：WASD 移动 / Shift 冲刺 / Space 跳跃 / F 飞行 / V 视角");
+    console.info(`[solar] 场景就绪：${solarFixture.name}（${solarFixture.sceneId}@${solarFixture.sceneRevision}），${solarFixture.strings.length} 个组串 / ${solarFixture.inverters.length} 台逆变器已登记`);
+    console.info("[solar] 键位：WASD 移动 / Shift 冲刺 / Space 跳跃 / F 飞行 / V 视角");
 }
 
 main().catch((e) => {

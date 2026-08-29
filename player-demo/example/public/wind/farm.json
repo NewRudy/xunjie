@@ -60,9 +60,9 @@
     "id": "OPS-WIND-01",
     "label": "运维点",
     "offset": {
-      "east": -260,
-      "north": 120,
-      "up": 150
+      "east": 200,
+      "north": 240,
+      "up": 148
     }
   },
   "turbines": [

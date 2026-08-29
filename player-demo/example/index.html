@@ -1,11 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>巡界 XUNJIE · 设备超级巡检人</title>
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
-        <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@900&family=Nunito:wght@700&display=swap" rel="stylesheet" />
+        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>" />
         <style>
             *,
             *::before,
@@ -16,144 +15,148 @@
             }
 
             :root {
-                --accent: #e8a020;
-                --card-bg: #f0f0f0;
-                --card-hover: #e6e6e6;
-                --text: #1a1a2e;
-                --muted: #999;
+                --accent: #43c9e8;
+                --accent-2: #789fd9;
+                --hot: #d8f5ff;
+                --text: #dceef6;
+                --muted: #7fa3b5;
+                --hairline: rgba(120, 200, 230, 0.16);
+                --panel: rgba(13, 25, 35, 0.66);
+                --warn: #e8a020;
+            }
+
+            html,
+            body {
+                background: #0a141c;
             }
 
             body {
                 min-height: 100vh;
-                background: #ececec;
                 color: var(--text);
-                font-family: "Nunito", sans-serif;
+                font-family:
+                    "PingFang SC",
+                    "HarmonyOS Sans SC",
+                    "Microsoft YaHei",
+                    system-ui,
+                    -apple-system,
+                    sans-serif;
+                overflow-x: hidden;
+            }
+
+            /* 动态背景画布：粒子流场 + 点阵数字孪生人 */
+            #twin-bg {
+                position: fixed;
+                inset: 0;
+                z-index: 0;
+                display: block;
+            }
+
+            .page {
+                position: relative;
+                z-index: 1;
+                min-height: 100vh;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                padding: 2.5rem 2rem 4rem;
+                padding: 0 2rem 3.5rem;
             }
 
-            /* ── GitHub corner ── */
-            .github-link {
-                position: fixed;
-                top: 1.2rem;
-                right: 1.4rem;
-                color: #333;
-                transition: color 0.15s;
-                z-index: 10;
-            }
-            .github-link:hover {
-                color: #000;
-            }
-            .github-link svg {
-                width: 28px;
-                height: 28px;
-            }
-
-            .version-switch {
-                position: fixed;
-                top: 1.2rem;
-                left: 1.4rem;
-                z-index: 10;
-                display: inline-flex;
-                border-radius: 20px;
-                overflow: hidden;
-                border: 1px solid rgba(0, 0, 0, 0.08);
-                background: #fff;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
-                font-size: 0.82rem;
-                font-weight: 700;
-                letter-spacing: 0.02em;
-            }
-            .version-switch-active {
-                padding: 6px 14px;
-                background: var(--accent);
-                color: #fff;
-            }
-            .version-switch-link {
-                padding: 6px 14px;
-                color: var(--text);
-                text-decoration: none;
-                transition: background 0.15s, color 0.15s;
-            }
-            .version-switch-link:hover {
-                background: rgba(0, 0, 0, 0.05);
-                color: #000;
-            }
-
-            h1 {
-                font-family: "Cinzel", serif;
-                font-size: clamp(1.4rem, 3.5vw, 2.2rem);
-                font-weight: 900;
-                letter-spacing: 0.06em;
-                text-align: center;
-                color: var(--text);
-                margin-bottom: 0.3rem;
-            }
-            .desc {
-                font-size: 0.88rem;
-                color: #555;
-                text-align: center;
-                max-width: 560px;
-                line-height: 1.6;
-                margin-bottom: 0.8rem;
-            }
-            .subtitle {
-                font-size: 0.78rem;
-                color: var(--muted);
-                letter-spacing: 0.14em;
-                text-transform: uppercase;
-                margin-bottom: 2.5rem;
-            }
-
-            .sections {
+            /* ── 顶栏 ── */
+            .topbar {
                 width: 100%;
                 max-width: 1200px;
                 display: flex;
-                flex-direction: column;
-                gap: 2.2rem;
-            }
-
-            .section {
-                display: flex;
-                flex-direction: column;
-                gap: 1rem;
-            }
-
-            .section-head {
-                display: flex;
-                align-items: end;
+                align-items: center;
                 justify-content: space-between;
-                gap: 1rem;
-                padding-bottom: 0.7rem;
-                border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+                padding: 1.1rem 0;
             }
-
-            .section-title {
-                font-size: 1.1rem;
+            .wordmark {
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
                 font-weight: 800;
-                letter-spacing: 0.04em;
+                letter-spacing: 0.12em;
+                font-size: 0.95rem;
+            }
+            .wordmark .dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: radial-gradient(circle at 35% 30%, #f5ffff 0 12%, var(--accent) 45%, #1b6d84 100%);
+                box-shadow: 0 0 10px rgba(67, 201, 232, 0.8);
+            }
+            .github-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.45rem;
+                color: var(--muted);
+                text-decoration: none;
+                font-size: 0.82rem;
+                transition: color 0.15s;
+            }
+            .github-link:hover {
+                color: var(--hot);
+            }
+            .github-link svg {
+                width: 20px;
+                height: 20px;
             }
 
-            .section-desc {
-                font-size: 0.9rem;
-                color: #666;
-                text-align: right;
+            /* ── Hero ── */
+            .hero {
+                width: 100%;
+                max-width: 1200px;
+                padding: 4.4rem 0 3.4rem;
+                text-align: center;
+            }
+            .hero-eyebrow {
+                font-size: 0.78rem;
+                letter-spacing: 0.32em;
+                color: var(--accent);
+                text-transform: uppercase;
+                margin-bottom: 1rem;
+            }
+            h1 {
+                font-size: clamp(2rem, 5vw, 3.2rem);
+                font-weight: 900;
+                letter-spacing: 0.08em;
+                background: linear-gradient(120deg, #f2fbff 20%, var(--accent) 55%, var(--accent-2) 90%);
+                -webkit-background-clip: text;
+                background-clip: text;
+                color: transparent;
+                margin-bottom: 1rem;
+            }
+            .hero-desc {
+                font-size: 0.95rem;
+                color: var(--muted);
+                max-width: 800px;
+                margin: 0 auto;
+                line-height: 1.9;
+            }
+            .hero-desc em {
+                font-style: normal;
+                color: var(--warn);
             }
 
-            /* ── grid ── */
+            /* ── 场景卡片 ── */
             .grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                grid-template-columns: repeat(3, 1fr); /* 三场景平级等大 */
                 gap: 1.2rem;
                 width: 100%;
                 max-width: 1200px;
+                margin-top: 2.2rem;
             }
-
-            /* ── card ── */
+            @media (max-width: 900px) {
+                .grid {
+                    grid-template-columns: 1fr;
+                }
+            }
             .card {
-                background: var(--card-bg);
+                position: relative;
+                background: rgba(16, 32, 44, 0.22);
+                backdrop-filter: blur(14px) saturate(1.5);
+                -webkit-backdrop-filter: blur(14px) saturate(1.5);
                 border-radius: 14px;
                 overflow: hidden;
                 text-decoration: none;
@@ -161,71 +164,111 @@
                 display: flex;
                 flex-direction: column;
                 aspect-ratio: 4/3;
-                border: 1px solid rgba(0, 0, 0, 0.06);
+                border: 1px solid rgba(120, 200, 230, 0.14);
                 transition:
                     transform 0.18s ease,
                     box-shadow 0.18s ease,
+                    border-color 0.18s ease,
                     background 0.18s ease;
                 opacity: 0;
                 animation: rise 0.4s ease forwards;
             }
+            .card-thumb,
+            .card-info {
+                opacity: 0.94;
+                transition:
+                    opacity 0.18s ease,
+                    filter 0.18s ease;
+            }
             .card:hover {
-                transform: translateY(-4px) scale(1.01);
-                background: var(--card-hover);
+                transform: translateY(-4px);
+                background: rgba(20, 40, 54, 0.5);
+                border-color: rgba(67, 201, 232, 0.55);
                 box-shadow:
-                    0 12px 36px rgba(0, 0, 0, 0.12),
-                    0 0 0 2px var(--accent);
+                    0 14px 40px rgba(0, 0, 0, 0.45),
+                    0 0 24px rgba(67, 201, 232, 0.18);
             }
-            .card:active {
-                transform: translateY(-1px) scale(1.005);
+            .card:hover .card-thumb,
+            .card:hover .card-info {
+                opacity: 1;
             }
+            .card:nth-child(1) { animation-delay: 0.05s; }
+            .card:nth-child(2) { animation-delay: 0.12s; }
+            .card:nth-child(3) { animation-delay: 0.19s; }
 
             .card-thumb {
                 flex: 1;
                 min-height: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                justify-content: flex-end;
+                padding: 1rem 1.2rem;
+                position: relative;
                 overflow: hidden;
             }
-
-            .card-thumb img {
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-                display: block;
+            .card-thumb .scene-no {
+                position: absolute;
+                top: 0.4rem;
+                right: 0.9rem;
+                font-size: 3.2rem;
+                font-weight: 900;
+                color: rgba(255, 255, 255, 0.14);
+                letter-spacing: 0.04em;
             }
-
-            /* 还没有截图时的占位封面：渐变 + 标签 */
-            .card-thumb.placeholder {
-                display: flex;
-                align-items: center;
-                justify-content: center;
+            .card-thumb .scene-kind {
+                font-size: 0.72rem;
+                letter-spacing: 0.28em;
+                color: rgba(255, 255, 255, 0.75);
+                margin-bottom: 0.3rem;
+            }
+            .card-thumb .scene-name {
+                font-size: 1.35rem;
+                font-weight: 800;
+                letter-spacing: 0.05em;
                 color: #fff;
-                font-family: "Cinzel", serif;
-                font-size: 1.4rem;
-                letter-spacing: 0.08em;
-                text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+                text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
             }
-            .card-thumb.ph-agihq {
-                background: linear-gradient(135deg, #3a6073, #16222a);
+            .thumb-hydro {
+                background:
+                    radial-gradient(420px 200px at 80% 0%, rgba(216, 245, 255, 0.16), transparent 60%),
+                    linear-gradient(150deg, rgba(24, 74, 116, 0.66) 0%, rgba(17, 114, 143, 0.6) 55%, rgba(14, 150, 168, 0.66) 100%);
             }
-            .card-thumb.ph-wind {
-                background: linear-gradient(135deg, #1f6f8b 0%, #14506b 45%, #0b6e4f 100%);
+            .thumb-wind {
+                background:
+                    radial-gradient(420px 200px at 80% 0%, rgba(216, 245, 255, 0.16), transparent 60%),
+                    linear-gradient(150deg, rgba(38, 135, 171, 0.68) 0%, rgba(25, 100, 133, 0.6) 48%, rgba(15, 134, 97, 0.68) 100%);
             }
-            .card-thumb.ph-google {
-                background: linear-gradient(135deg, #4286f4, #1b3a7a 70%);
+            .thumb-pv {
+                background:
+                    radial-gradient(420px 200px at 80% 0%, rgba(255, 240, 200, 0.16), transparent 60%),
+                    linear-gradient(150deg, rgba(148, 100, 20, 0.66) 0%, rgba(192, 128, 28, 0.58) 45%, rgba(74, 108, 152, 0.66) 100%);
             }
 
             .card-info {
-                padding: 0.9rem 1.2rem;
+                padding: 0.85rem 1.2rem;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                border-top: 1px solid rgba(0, 0, 0, 0.06);
+                gap: 0.6rem;
+                border-top: 1px solid var(--hairline);
             }
-            .card-name {
-                font-size: 1rem;
-                font-weight: 700;
+            .card-meta {
+                display: flex;
+                flex: 1;
+                flex-direction: row;
+                align-items: baseline;
+                justify-content: center;
+                gap: 0.5em;
+                min-width: 0;
+                white-space: nowrap;
             }
-           
+            .card-tag {
+                font-size: 1.28rem;
+                letter-spacing: 0.1em;
+                color: var(--muted);
+                line-height: 1.5;
+            }
             .play-btn {
                 width: 2rem;
                 height: 2rem;
@@ -235,34 +278,94 @@
                 align-items: center;
                 justify-content: center;
                 flex-shrink: 0;
-                box-shadow: 0 2px 8px rgba(232, 160, 32, 0.35);
-                transition:
-                    transform 0.15s,
-                    background 0.15s;
+                box-shadow: 0 2px 10px rgba(67, 201, 232, 0.4);
+                transition: transform 0.15s;
             }
             .card:hover .play-btn {
                 transform: scale(1.12);
-                background: #f5b535;
             }
             .play-btn svg {
                 width: 10px;
                 height: 10px;
-                fill: #fff;
+                fill: #04222c;
                 margin-left: 2px;
             }
 
-            /* WIP */
-            .card.wip {
-                opacity: 0.25 !important;
+            /* 封面特征图案（SVG 装饰层） */
+            .thumb-art {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
                 pointer-events: none;
-                border-style: dashed;
             }
-            .card.wip .play-btn {
-                background: var(--muted);
-                box-shadow: none;
+            .thumb-wind .rotor {
+                transform-box: fill-box;
+                transform-origin: center;
+                animation: rotor-spin 7s linear infinite;
+            }
+            .thumb-wind .rotor-2 {
+                animation-duration: 9s;
+                animation-direction: reverse;
+            }
+            @keyframes rotor-spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+            .thumb-hydro .wave {
+                animation: wave-drift 10s linear infinite;
+            }
+            .thumb-hydro .wave-2 {
+                animation-duration: 14s;
+                animation-direction: reverse;
+            }
+            @keyframes wave-drift {
+                from {
+                    transform: translateX(0);
+                }
+                to {
+                    transform: translateX(-104px);
+                }
+            }
+            .thumb-pv .sun {
+                animation: sun-pulse 5s ease-in-out infinite;
+            }
+            .thumb-pv .sun-rays {
+                transform-box: fill-box;
+                transform-origin: center;
+                animation: rays-spin 28s linear infinite;
+            }
+            @keyframes rays-spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+            @keyframes sun-pulse {
+                0%,
+                100% {
+                    opacity: 0.5;
+                }
+                50% {
+                    opacity: 0.9;
+                }
             }
 
-            /* stagger */
+            /* 未开放卡片：外观与开放卡一致，仅无点击行为 */
+            .card.wip {
+                cursor: default;
+            }
+            .card.wip:hover {
+                transform: none;
+                background: rgba(16, 32, 44, 0.22);
+                border-color: rgba(120, 200, 230, 0.14);
+                box-shadow: none;
+            }
+            .card.wip:hover .card-thumb,
+            .card.wip:hover .card-info {
+                opacity: 0.94;
+            }
+
             @keyframes rise {
                 from {
                     opacity: 0;
@@ -273,66 +376,299 @@
                     transform: translateY(0);
                 }
             }
-            .card:nth-child(1) {
-                animation-delay: 0.05s;
-            }
-            .card:nth-child(2) {
-                animation-delay: 0.12s;
-            }
-            .card:nth-child(3) {
-                animation-delay: 0.19s;
-            }
-
-            @media (max-width: 720px) {
-                .section-head {
-                    align-items: flex-start;
-                    flex-direction: column;
-                }
-
-                .section-desc {
-                    text-align: left;
-                }
-            }
         </style>
     </head>
     <body>
-        <a class="github-link" href="https://github.com/hh-hang/cesium-player-controller" target="_blank" title="GitHub">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-                <path
-                    d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577
-                    0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755
-                    -1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998
-                    .108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22
-                    -.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405
-                    1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176
-                    .765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22
-                    0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297
-                    c0-6.627-5.373-12-12-12"
-                />
-            </svg>
-        </a>
+        <canvas id="twin-bg"></canvas>
 
-        <h1>巡界 XUNJIE · 设备超级巡检人</h1>
-        <p class="desc">风电工程场景 · 老鸦岭演示（SIMULATED 仿真）</p>
+        <div class="page">
+            <div class="topbar">
+                <div class="wordmark"><span class="dot"></span>巡界 XUNJIE</div>
+                <a class="github-link" href="https://github.com/NewRudy/xunjie" target="_blank" rel="noopener" title="GitHub · NewRudy/xunjie">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577
+                            0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755
+                            -1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998
+                            .108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22
+                            -.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405
+                            1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176
+                            .765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22
+                            0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297
+                            c0-6.627-5.373-12-12-12"
+                        />
+                    </svg>
+                    NewRudy/xunjie
+                </a>
+            </div>
 
-        <div class="sections">
-            <section class="section">
-                <div class="section-head">
-                    <div class="section-title">工程场景</div>
-                    <div class="section-desc">数字运维员 · 自然语言驱动 · 全程可追溯</div>
-                </div>
-                <div class="grid">
-                    <a class="card" href="./wind/">
-                        <div class="card-thumb placeholder ph-wind">
-                            <span>风电场站 · 老鸦岭</span>
+            <header class="hero">
+                <div class="hero-eyebrow">SUPER INSPECTOR · 水风光工程场景</div>
+                <h1>巡界 XUNJIE · 设备超级巡检人</h1>
+                <p class="hero-desc">
+                    大模型驱动的数字运维人。<br />
+                    融合设备运行、空间场景与环境信息主动研判，授权后进入数字现场执行巡检、诊断与维修处置，全程留痕可追溯。
+                </p>
+            </header>
+
+            <div class="grid">
+                <a class="card" href="./hydro/">
+                    <div class="card-thumb thumb-hydro">
+                        <svg class="thumb-art" viewBox="0 0 320 190" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+                            <path d="M196 58 L232 58 L248 190 L180 190 Z" fill="rgba(240,252,255,.10)" />
+                            <path d="M234 64 q5 42 -7 78" stroke="rgba(240,252,255,.30)" stroke-width="2" fill="none" stroke-linecap="round" />
+                            <g class="wave" stroke="rgba(240,252,255,.38)" stroke-width="2.5" fill="none" stroke-linecap="round">
+                                <path d="M-104 148 q26 -12 52 0 t52 0 t52 0 t52 0 t52 0 t52 0 t52 0 t52 0 t52 0 t52 0" />
+                            </g>
+                            <g class="wave wave-2" stroke="rgba(240,252,255,.2)" stroke-width="2" fill="none" stroke-linecap="round">
+                                <path d="M-104 168 q26 -10 52 0 t52 0 t52 0 t52 0 t52 0 t52 0 t52 0 t52 0 t52 0 t52 0" />
+                            </g>
+                        </svg>
+                        <span class="scene-no">01</span>
+                        <span class="scene-kind">HYDRO STATION</span>
+                        <span class="scene-name">水电站</span>
+                    </div>
+                    <div class="card-info">
+                        <div class="card-meta">
+                            <span class="card-tag">坝区廊道长，巡检费时高危</span>
                         </div>
-                        <div class="card-info">
-                            <span class="card-name">风电场站 · 老鸦岭</span><em class="badge">SIMULATED 仿真</em>
-                            <span class="play-btn"><svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" /></svg></span>
+                        <span class="play-btn"><svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" /></svg></span>
+                    </div>
+                </a>
+
+                <a class="card" href="./wind/">
+                    <div class="card-thumb thumb-wind">
+                        <svg class="thumb-art" viewBox="0 0 320 190" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+                            <g stroke="rgba(240,252,255,.5)" stroke-width="2.5" stroke-linecap="round" fill="none">
+                                <line x1="230" y1="190" x2="230" y2="98" />
+                                <g class="rotor">
+                                    <line x1="230" y1="98" x2="230" y2="60" />
+                                    <line x1="230" y1="98" x2="263" y2="117" />
+                                    <line x1="230" y1="98" x2="197" y2="117" />
+                                </g>
+                                <line x1="286" y1="190" x2="286" y2="128" />
+                                <g class="rotor rotor-2">
+                                    <line x1="286" y1="128" x2="286" y2="102" />
+                                    <line x1="286" y1="128" x2="308" y2="141" />
+                                    <line x1="286" y1="128" x2="264" y2="141" />
+                                </g>
+                            </g>
+                        </svg>
+                        <span class="scene-no">02</span>
+                        <span class="scene-kind">WIND FARM</span>
+                        <span class="scene-name">风电场站</span>
+                    </div>
+                    <div class="card-info">
+                        <div class="card-meta">
+                            <span class="card-tag">机组散落山脊，登塔排障难</span>
                         </div>
-                    </a>
-                </div>
-            </section>
+                        <span class="play-btn"><svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" /></svg></span>
+                    </div>
+                </a>
+
+                <a class="card" href="./solar/">
+                    <div class="card-thumb thumb-pv">
+                        <svg class="thumb-art" viewBox="0 0 320 190" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+                            <circle class="sun" cx="66" cy="56" r="15" fill="rgba(255,238,190,.55)" />
+                            <g class="sun-rays" stroke="rgba(255,238,190,.45)" stroke-width="2" stroke-linecap="round">
+                                <line x1="88" y1="56" x2="95" y2="56" />
+                                <line x1="77" y1="75" x2="80.5" y2="81" />
+                                <line x1="55" y1="75" x2="51.5" y2="81" />
+                                <line x1="44" y1="56" x2="37" y2="56" />
+                                <line x1="55" y1="37" x2="51.5" y2="31" />
+                                <line x1="77" y1="37" x2="80.5" y2="31" />
+                            </g>
+                            <g fill="rgba(240,252,255,.13)" stroke="rgba(240,252,255,.32)" stroke-width="1.5">
+                                <path d="M148 150 l38 -11 l44 9 l-38 11 Z" />
+                                <path d="M196 161 l38 -11 l44 9 l-38 11 Z" />
+                                <path d="M244 172 l38 -11 l44 9 l-38 11 Z" />
+                                <path d="M104 163 l38 -11 l44 9 l-38 11 Z" />
+                                <path d="M152 174 l38 -11 l44 9 l-38 11 Z" />
+                            </g>
+                        </svg>
+                        <span class="scene-no">03</span>
+                        <span class="scene-kind">PV PARK</span>
+                        <span class="scene-name">光伏电站</span>
+                    </div>
+                    <div class="card-info">
+                        <div class="card-meta">
+                            <span class="card-tag">组串成千上万，热斑难定位</span>
+                        </div>
+                        <span class="play-btn"><svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" /></svg></span>
+                    </div>
+                </a>
+            </div>
         </div>
+
+        <script>
+            // 动态背景：粒子流场（呼应场景内的 GPU 风场流线）+ 点阵数字孪生人 + 漂移指令文字（大模型操控意象）
+            // 纯 canvas 2D，无依赖；prefers-reduced-motion 时只画一帧静态。
+            (() => {
+                const canvas = document.getElementById("twin-bg");
+                const ctx = canvas.getContext("2d");
+                const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                let w = 0,
+                    h = 0,
+                    dpr = 1;
+
+                function resize() {
+                    dpr = Math.min(window.devicePixelRatio || 1, 2);
+                    w = window.innerWidth;
+                    h = window.innerHeight;
+                    canvas.width = w * dpr;
+                    canvas.height = h * dpr;
+                    canvas.style.width = w + "px";
+                    canvas.style.height = h + "px";
+                    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                    ctx.fillStyle = "#0a141c";
+                    ctx.fillRect(0, 0, w, h);
+                }
+                resize();
+                window.addEventListener("resize", resize);
+
+                // —— 流场角度：廉价伪噪声（sin/cos 叠加），整体向右流动 ——
+                const field = (x, y, t) =>
+                    Math.sin(x * 0.0021 + t * 0.18) * 1.1 +
+                    Math.cos(y * 0.0024 - t * 0.13) * 0.9 +
+                    Math.sin((x + y) * 0.0009 + t * 0.05) * 0.6;
+
+                // —— 粒子 ——
+                const N = 240;
+                const parts = [];
+                const spawn = (p) => {
+                    p.x = Math.random() * w;
+                    p.y = Math.random() * h;
+                    p.px = p.x;
+                    p.py = p.y;
+                    p.life = 120 + Math.random() * 200;
+                    p.speed = 0.4 + Math.random() * 0.9;
+                    p.hue = Math.random() < 0.85 ? "67,201,232" : "216,245,255";
+                };
+                for (let i = 0; i < N; i++) {
+                    const p = {};
+                    spawn(p);
+                    p.life = Math.random() * 300;
+                    parts.push(p);
+                }
+
+                // —— 点阵数字孪生人（骨架采样点，归一化坐标；右臂微抬作指挥状） ——
+                const segs = [];
+                const seg = (x1, y1, x2, y2, n) => {
+                    for (let i = 0; i <= n; i++) segs.push([x1 + (x2 - x1) * (i / n), y1 + (y2 - y1) * (i / n)]);
+                };
+                for (let i = 0; i < 16; i++) {
+                    const a = (i / 16) * Math.PI * 2;
+                    segs.push([Math.cos(a) * 0.07, -0.62 + Math.sin(a) * 0.07]); // 头
+                }
+                seg(0, -0.54, 0, -0.5, 2); // 颈
+                seg(0, -0.5, 0, -0.1, 12); // 脊柱
+                seg(-0.14, -0.46, 0.14, -0.46, 8); // 肩
+                seg(-0.14, -0.46, -0.2, -0.2, 6); // 左大臂
+                seg(-0.2, -0.2, -0.16, 0.02, 5); // 左小臂
+                seg(0.14, -0.46, 0.26, -0.3, 6); // 右大臂（抬）
+                seg(0.26, -0.3, 0.38, -0.22, 5); // 右小臂（前指）
+                seg(-0.07, -0.1, 0.07, -0.1, 4); // 髋
+                seg(-0.07, -0.1, -0.09, 0.18, 7); // 左大腿
+                seg(-0.09, 0.18, -0.1, 0.46, 6); // 左小腿
+                seg(0.07, -0.1, 0.1, 0.18, 7); // 右大腿
+                seg(0.1, 0.18, 0.12, 0.46, 6); // 右小腿
+                const figure = segs.map(([x, y], i) => ({ x, y, ph: i * 0.7 }));
+
+                // —— 漂移指令文字（大模型下发的高层命令意象） ——
+                const PHRASES = ["飞到 7 号风机", "维修 7 号风机", "查看 5 号风机", "回运维点", "左转 90 度", "停下", "navigate → CP-WT-07", "repair_simulation", "focus_asset", "trace: 解释 → 执行"];
+                const whispers = [];
+                let whisperTimer = 0;
+
+                let t = 0;
+                function frame() {
+                    t += 0.016;
+                    // 拖尾：半透明底色覆盖
+                    ctx.fillStyle = "rgba(10,20,28,0.085)";
+                    ctx.fillRect(0, 0, w, h);
+
+                    // 粒子流线
+                    ctx.lineWidth = 1;
+                    for (const p of parts) {
+                        const a = field(p.x, p.y, t);
+                        p.px = p.x;
+                        p.py = p.y;
+                        p.x += Math.cos(a) * p.speed * 1.6;
+                        p.y += Math.sin(a) * p.speed * 1.6 + 0.12;
+                        p.life--;
+                        if (p.life <= 0 || p.x < -20 || p.x > w + 20 || p.y < -20 || p.y > h + 20) {
+                            spawn(p);
+                            continue;
+                        }
+                        const alpha = Math.min(0.34, (p.life / 300) * 0.4);
+                        ctx.strokeStyle = `rgba(${p.hue},${alpha})`;
+                        ctx.beginPath();
+                        ctx.moveTo(p.px, p.py);
+                        ctx.lineTo(p.x, p.y);
+                        ctx.stroke();
+                    }
+
+                    // 数字孪生人：右侧，呼吸浮动 + 扫描环
+                    const s = Math.min(w, h) * 0.52;
+                    const cx = w * 0.79;
+                    const cy = h * 0.46 + Math.sin(t * 1.1) * 5;
+                    const ringR = s * (0.62 + 0.05 * Math.sin(t * 0.9));
+                    ctx.strokeStyle = "rgba(67,201,232,0.10)";
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy - s * 0.08, ringR, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.strokeStyle = "rgba(67,201,232,0.05)";
+                    ctx.beginPath();
+                    ctx.arc(cx, cy - s * 0.08, ringR * 1.18, 0, Math.PI * 2);
+                    ctx.stroke();
+                    for (const d of figure) {
+                        const jx = Math.sin(t * 2.2 + d.ph) * 0.004;
+                        const jy = Math.cos(t * 1.7 + d.ph * 1.3) * 0.004;
+                        const x = cx + (d.x + jx) * s;
+                        const y = cy + (d.y + jy) * s;
+                        const glow = 0.28 + 0.22 * Math.sin(t * 2 + d.ph);
+                        ctx.fillStyle = `rgba(120,220,245,${glow * 0.35})`;
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = `rgba(190,240,255,${glow})`;
+                        ctx.beginPath();
+                        ctx.arc(x, y, 1.3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    // 指令文字：从右侧流入，随场漂移，淡入淡出
+                    whisperTimer--;
+                    if (whisperTimer <= 0 && whispers.length < 4) {
+                        whispers.push({
+                            text: PHRASES[Math.floor(Math.random() * PHRASES.length)],
+                            x: w + 40,
+                            y: h * (0.12 + Math.random() * 0.72),
+                            age: 0,
+                            ttl: 900 + Math.random() * 300,
+                        });
+                        whisperTimer = 200 + Math.random() * 260;
+                    }
+                    ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
+                    for (let i = whispers.length - 1; i >= 0; i--) {
+                        const ws = whispers[i];
+                        const a = field(ws.x, ws.y, t);
+                        ws.x += Math.cos(a) * 0.7 - 0.5;
+                        ws.y += Math.sin(a) * 0.4;
+                        ws.age++;
+                        const fade = Math.min(1, ws.age / 120, (ws.ttl - ws.age) / 160);
+                        if (ws.age > ws.ttl || ws.x < -200) {
+                            whispers.splice(i, 1);
+                            continue;
+                        }
+                        ctx.fillStyle = `rgba(67,201,232,${0.42 * fade})`;
+                        ctx.fillText("› " + ws.text, ws.x, ws.y);
+                    }
+
+                    if (!reduced) requestAnimationFrame(frame);
+                }
+                frame();
+            })();
+        </script>
     </body>
 </html>

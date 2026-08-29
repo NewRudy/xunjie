@@ -316,6 +316,84 @@ section('简式运动：上/下/左/右/前/后 + 起飞/飞行/降落/悬停');
   ok(windLong[0].kind === 'navigate' && windLong[0].targetId === 'CP-WT-07', '风电长句仍走导航路由', JSON.stringify(windLong[0]));
 }
 
+// ---------- 水电巡检路线规划（HYDRO-PLANT-01：一句话规划 → 多站 navigate 数组） ----------
+section('水电路线规划（scene=hydro）');
+{
+  for (const text of ['规划巡检路线', '巡检一圈', '来条路线', '带我巡检一遍']) {
+    try {
+      const cmds = parseAvatarCommand(text, 'hydro');
+      const targets = cmds.map((c) => c.targetId);
+      ok(
+        cmds.length === 4 && cmds.every((c) => c.kind === 'navigate' && c.movement === 'fly') && targets.join(',') === 'CP-HU-01,CP-HU-02,CP-HU-03,CP-GATE-01',
+        `「${text}」→ 4 站路线（1→2→3 号机组→泄洪闸门，fly）`,
+        JSON.stringify(targets),
+      );
+    } catch (e) {
+      ok(false, `「${text}」→ 4 站路线`, e.message);
+    }
+  }
+  const routeReply = interpretAvatarCommand('规划巡检路线', 'hydro').reply;
+  ok(routeReply.includes('已规划巡检路线') && routeReply.includes('泄洪闸门') && routeReply.includes('4 站'), '路线 reply 报站名清单', routeReply);
+
+  const hydroRoute = await post({ text: '规划巡检路线', sceneId: 'HYDRO-PLANT-01', sceneRevision: 'fixture-v1' });
+  const hydroRouteBody = await hydroRoute.json();
+  ok(hydroRoute.status === 200 && hydroRouteBody.data?.commands?.length === 4 && hydroRouteBody.truth === 'SIMULATED', '路由冒烟：水电路线规划 200 + 4 命令 + SIMULATED', JSON.stringify(hydroRouteBody.data?.commands?.map((c) => c.targetId)));
+}
+
+// ---------- 光伏阵列「找板子」（PECC-PARK-01：solar.json 84 组串登记，区编址 A~G） ----------
+section('光伏找板子（scene=pecc，solar.json）');
+{
+  const loc = parseAvatarCommand('B区7号组串在哪');
+  ok(loc.length === 1 && loc[0].kind === 'navigate' && loc[0].targetId === 'CP-STR-B-07' && loc[0].movement === 'walk', 'B区7号组串在哪 → navigate CP-STR-B-07 walk', JSON.stringify(loc));
+  const locReply = interpretAvatarCommand('B区7号组串在哪').reply;
+  ok(locReply.includes('B 区 7 号组串') && locReply.includes('已带你过去'), '定位 reply 带方位描述', locReply);
+
+  const row = parseAvatarCommand('B区2排7号组串在哪');
+  ok(row[0].targetId === 'CP-STR-B-07', 'B区2排7号组串（排号忽略，兼容旧说法）→ CP-STR-B-07', JSON.stringify(row));
+
+  const byId = parseAvatarCommand('STR-B2-07 在哪');
+  ok(byId[0].targetId === 'CP-STR-B-07', '直接说 ID「STR-B2-07」→ CP-STR-B-07', JSON.stringify(byId));
+  const byIdAlias = parseAvatarCommand('STR-B1-07 在哪');
+  ok(byIdAlias[0].targetId === 'CP-STR-B-07', 'STR-B1-07 → 同指 B 区 7 号（语义键 zone+no，以 fixture 登记为准）', JSON.stringify(byIdAlias));
+
+  const c3 = parseAvatarCommand('带我去 C 区 3 号组串');
+  ok(c3.length === 1 && c3[0].kind === 'navigate' && c3[0].targetId === 'CP-STR-C-03' && c3[0].movement === 'walk', '带我去 C 区 3 号组串 → CP-STR-C-03 walk', JSON.stringify(c3));
+
+  try {
+    parseAvatarCommand('7号组串在哪');
+    ok(false, '「7号组串在哪」→ 应澄清（缺区号）');
+  } catch (e) {
+    ok(e instanceof AvatarClarificationError && e.message.includes('区号') && e.message.includes('A~G'), '「7号组串在哪」→ 澄清补区号（A~G）', e.message);
+  }
+
+  const rep = parseAvatarCommand('维修B区7号组串');
+  ok(
+    rep.length === 3 && rep.map((c) => c.kind).join(',') === 'navigate,focus_asset,repair_simulation' && rep[0].targetId === 'CP-STR-B-07' && rep[0].movement === 'walk' && rep[2].checkpointId === 'CP-STR-B-07',
+    '维修B区7号组串 → navigate walk + focus_asset + repair_simulation（CP-STR-B-07）',
+    JSON.stringify(rep),
+  );
+  const repReply = interpretAvatarCommand('维修B区7号组串').reply;
+  ok(repReply.includes('旁路二极管') && repReply.includes('SIMULATED'), '组串维修 reply 标部件与 SIMULATED', repReply);
+
+  try {
+    parseAvatarCommand('维修 B 区 3 号组串');
+    ok(false, '维修 B 区 3 号组串 → 应澄清（未登记维修对象）');
+  } catch (e) {
+    ok(e instanceof AvatarClarificationError && e.message.includes('未登记维修对象'), '维修 B 区 3 号组串 → 澄清「该组串未登记维修对象」', e.message);
+  }
+
+  const oldRep = parseAvatarCommand('维修 7 号异常组串');
+  ok(oldRep.length === 3 && oldRep[0].targetId === 'CP-INV-B02' && oldRep[2].checkpointId === 'CP-INV-B02', '旧行为不变：维修 7 号异常组串 → CP-INV-B02', JSON.stringify(oldRep));
+
+  const { SOLAR_STRINGS, SOLAR_NAV_TARGETS, SOLAR_REPAIR } = await import('../src/agent/solarArray.ts');
+  ok(SOLAR_STRINGS.length === 84 && SOLAR_STRINGS.every((s) => s.checkpointId.startsWith('CP-STR-')), 'solar.json 84 组串登记且各带 CP-STR 检查点');
+  ok(SOLAR_NAV_TARGETS.length === 84 && SOLAR_REPAIR.targetId === 'STR-B2-07' && SOLAR_REPAIR.checkpointId === 'CP-STR-B-07', 'SOLAR_NAV_TARGETS=84 + 唯一维修对象 STR-B2-07@CP-STR-B-07');
+
+  const peccFind = await post({ text: 'B区7号组串在哪' });
+  const peccFindBody = await peccFind.json();
+  ok(peccFind.status === 200 && peccFindBody.data?.commands?.[0]?.targetId === 'CP-STR-B-07', '路由冒烟：找板子 200 + CP-STR-B-07', JSON.stringify(peccFindBody.data?.commands));
+}
+
 // ---------- 汇总 ----------
 fs.rmSync(tmpDb, { force: true });
 console.log(`\n========================================`);

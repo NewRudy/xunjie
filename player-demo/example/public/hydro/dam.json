@@ -1,0 +1,142 @@
+{
+  "sceneId": "HYDRO-PLANT-01",
+  "sceneRevision": "fixture-v1",
+  "name": "黔澜峡水电站（演示仿真）",
+  "specs": {
+    "坝型": "混凝土拱坝",
+    "最大坝高": "93 米",
+    "坝顶长度": "312 米",
+    "总装机容量": "75 兆瓦（3×25 兆瓦）",
+    "水轮机": "混流式水轮发电机组",
+    "额定水头": "68 米",
+    "泄洪设施": "坝顶表孔泄洪闸",
+    "厂房": "坝后式地面厂房"
+  },
+  "fictional": true,
+  "note": "巡界水电工程场景包：坝体摄影测量模型 CC-BY-4.0（Monticello Dam by Mr. Trevor），机组布局为虚构演示布局，不代表真实电站。全部位置为场景原点 ENU 局部偏移（米）。",
+  "origin": {
+    "lon": 106.85,
+    "lat": 26.9,
+    "heightM": 650
+  },
+  "assets": {
+    "dam": {
+      "gltfUrl": "hydro/assets/monticello-dam/scene.gltf",
+      "scale": 60,
+      "credit": "Monticello Dam by Mr. Trevor (Sketchfab), CC-BY-4.0"
+    },
+    "player": {
+      "glbUrl": "glb/UAL1_Standard.glb",
+      "scale": 0.01
+    }
+  },
+  "opsPoint": {
+    "id": "OPS-HYDRO-01",
+    "label": "运维点",
+    "offset": {
+      "east": 40,
+      "north": 0,
+      "up": -34.4
+    }
+  },
+  "units": [
+    {
+      "id": "HS-HU-01",
+      "label": "1 号机组",
+      "no": 1,
+      "checkpointId": "CP-HU-01",
+      "offset": {
+        "east": -100,
+        "north": -30,
+        "up": -20.4
+      },
+      "headingDeg": 180,
+      "riskLevel": "normal",
+      "stateNote": "运行正常"
+    },
+    {
+      "id": "HS-HU-02",
+      "label": "2 号机组",
+      "no": 2,
+      "checkpointId": "CP-HU-02",
+      "offset": {
+        "east": -110,
+        "north": -25,
+        "up": -16.3
+      },
+      "headingDeg": 180,
+      "riskLevel": "critical",
+      "stateNote": "水轮机主轴密封磨损特征明显，已登记维修工单"
+    },
+    {
+      "id": "HS-HU-03",
+      "label": "3 号机组",
+      "no": 3,
+      "checkpointId": "CP-HU-03",
+      "offset": {
+        "east": -90,
+        "north": -25,
+        "up": -36.1
+      },
+      "headingDeg": 180,
+      "riskLevel": "warning",
+      "stateNote": "定子绕组温度有偏高趋势，建议持续关注"
+    },
+    {
+      "id": "HS-GATE-01",
+      "label": "泄洪闸门",
+      "no": 4,
+      "checkpointId": "CP-GATE-01",
+      "offset": {
+        "east": -125,
+        "north": 28,
+        "up": -14
+      },
+      "headingDeg": 0,
+      "riskLevel": "normal",
+      "stateNote": "闸门启闭机构运行正常"
+    }
+  ],
+  "repairTargets": [
+    {
+      "targetId": "HS-HU-02",
+      "checkpointId": "CP-HU-02",
+      "componentId": "TURBINE-MAIN-SHAFT-SEAL",
+      "componentLabel": "水轮机主轴密封",
+      "steps": [
+        {
+          "id": "RS-1",
+          "label": "安全确认：机组已停机、尾水闸门已落（SIMULATED）"
+        },
+        {
+          "id": "RS-2",
+          "label": "到达 2 号机组检查点 CP-HU-02"
+        },
+        {
+          "id": "RS-3",
+          "label": "水车室定位：高亮主轴密封（TURBINE-MAIN-SHAFT-SEAL）"
+        },
+        {
+          "id": "RS-4",
+          "label": "读取漏水/振动仿真读数，确认密封磨损特征"
+        },
+        {
+          "id": "RS-5",
+          "label": "更换主轴密封（仿真作业）"
+        },
+        {
+          "id": "RS-6",
+          "label": "复测：漏水量/振动回到正常区间（SIMULATED）"
+        },
+        {
+          "id": "RS-7",
+          "label": "生成可追溯维修记录（部件、时间、操作人、SIMULATED 标签）"
+        }
+      ]
+    }
+  ],
+  "credits": [
+    "Monticello Dam by Mr. Trevor (https://sketchfab.com/tjmartin97), CC-BY-4.0",
+    "UAL1_Standard.glb 人物模型见 web/public/vendor/NOTICE.md（CC-BY-4.0）"
+  ]
+}

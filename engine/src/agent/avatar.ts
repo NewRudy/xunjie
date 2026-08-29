@@ -1,15 +1,17 @@
 // 巡界数字运维员：自然语言指令 → 受控数字人动作（contracts/avatar-command.md）
 // 确定性中文解析，不依赖 LLM/密钥；只输出合同受控命令集合，绝不生成脚本、Cesium API 或未登记坐标。
-// 本模块按场景（PECC 光伏 / WIND-FARM-01 风电）分别解析；风电登记 ID 来自 windFarm.ts（farm.json 单一事实源）。
+// 本模块按场景（PECC 光伏 / WIND-FARM-01 风电 / HYDRO-PLANT-01 水电）分别解析；风电登记 ID 来自 windFarm.ts（farm.json 单一事实源），水电登记 ID 来自 hydroDam.ts（dam.json 单一事实源）。
 // Demo 稳定性优先：除响应内 commandId 序号与模块加载时的 farm.json 读取外无其他副作用。
 
 import { WIND_REPAIR, windTargetLabel, windTurbineByNo } from './windFarm';
+import { HYDRO_REPAIR, hydroDam, hydroTargetLabel, hydroUnitByNo } from './hydroDam';
+import { SOLAR_REPAIR, solarBearingText, solarStringByCheckpointId, solarStringByZoneNo, solarTargetLabel } from './solarArray';
 import type { PlannerInfo } from './types';
 
 // —— 受控命令集合（contracts/avatar-command.md §3 + §9 风电场景） ——
 
 export type AvatarMovement = 'walk' | 'run' | 'fly';
-export type AvatarScene = 'pecc' | 'wind';
+export type AvatarScene = 'pecc' | 'wind' | 'hydro';
 export type PeccTargetId = 'OPS-01' | 'CP-B02-FRONT' | 'CP-B02-ROOF' | 'CP-INV-B02';
 export type WindCheckpointId =
   | 'CP-WT-01' | 'CP-WT-02' | 'CP-WT-03' | 'CP-WT-04' | 'CP-WT-05'
@@ -17,8 +19,12 @@ export type WindCheckpointId =
 export type WindTurbineId =
   | 'HS-WTG-01' | 'HS-WTG-02' | 'HS-WTG-03' | 'HS-WTG-04' | 'HS-WTG-05'
   | 'HS-WTG-06' | 'HS-WTG-07' | 'HS-WTG-08' | 'HS-WTG-09' | 'HS-WTG-10';
-export type AvatarTargetId = PeccTargetId | 'OPS-WIND-01' | WindCheckpointId;
-export type AvatarFocusId = 'STR-B2-07' | 'INV-B-02' | WindTurbineId;
+export type HydroCheckpointId = 'CP-HU-01' | 'CP-HU-02' | 'CP-HU-03' | 'CP-GATE-01';
+export type HydroUnitId = 'HS-HU-01' | 'HS-HU-02' | 'HS-HU-03' | 'HS-GATE-01';
+/** 光伏阵列组串检查点（solar.json 登记，CP-STR-{A..G}-{nn}；数据驱动故用模板类型，不手抄 84 个字面量） */
+export type SolarStringCheckpointId = `CP-STR-${'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G'}-${string}`;
+export type AvatarTargetId = PeccTargetId | 'OPS-WIND-01' | WindCheckpointId | 'OPS-HYDRO-01' | HydroCheckpointId | SolarStringCheckpointId;
+export type AvatarFocusId = 'STR-B2-07' | 'INV-B-02' | WindTurbineId | HydroUnitId;
 
 export type AvatarCommand =
   | { commandId: string; kind: 'navigate'; targetId: AvatarTargetId; movement: AvatarMovement }
@@ -28,7 +34,9 @@ export type AvatarCommand =
   | { commandId: string; kind: 'stop' }
   | { commandId: string; kind: 'focus_asset'; targetId: AvatarFocusId }
   | { commandId: string; kind: 'repair_simulation'; targetId: 'STR-B2-07'; checkpointId: 'CP-INV-B02' }
+  | { commandId: string; kind: 'repair_simulation'; targetId: 'STR-B2-07'; checkpointId: 'CP-STR-B-07' }
   | { commandId: string; kind: 'repair_simulation'; targetId: 'HS-WTG-07'; checkpointId: 'CP-WT-07' }
+  | { commandId: string; kind: 'repair_simulation'; targetId: 'HS-HU-02'; checkpointId: 'CP-HU-02' }
   | { commandId: string; kind: 'start_inspection'; anomalyId: 'ANOM-DEMO-01' }
   | { commandId: string; kind: 'decide_pending'; decision: 'approve' | 'reject' }
   | { commandId: string; kind: 'capture_evidence'; evidenceKinds: ['photo', 'thermal', 'reading'] };
@@ -60,6 +68,7 @@ export const AVATAR_EXAMPLES = [
   '跳一下',
   '停下',
   '维修 7 号异常组串',
+  'B 区 7 号组串在哪',
   '检查 B2 屋顶异常',
   '我同意',
   '我不同意',
@@ -79,7 +88,19 @@ export const WIND_AVATAR_EXAMPLES = [
   '停下',
 ];
 
-// —— 澄清错误（路由层映射 400 CLARIFICATION_NEEDED，不猜目标） ——
+/** 水电场景示例（镜像风电；坝区尺度大，导航默认飞行） */
+export const HYDRO_AVATAR_EXAMPLES = [
+  '飞到 2 号机组',
+  '维修 2 号机组',
+  '查看泄洪闸门',
+  '查看 3 号机组',
+  '规划巡检路线',
+  '回运维点',
+  '向前走 10 米',
+  '左转 90 度',
+  '跳一下',
+  '停下',
+];
 
 export class AvatarClarificationError extends Error {
   constructor(message: string, public readonly examples: string[] = AVATAR_EXAMPLES, public readonly planner?: PlannerInfo) {
@@ -176,8 +197,14 @@ const TARGET_LABEL: Record<string, string> = {
   'INV-B-02': 'B2 逆变器',
 };
 
-/** 标签解析：光伏静态表优先，风电 ID 走 farm.json 注册表（windFarm.ts） */
-const labelOf = (id: string): string => TARGET_LABEL[id] ?? windTargetLabel(id);
+/** 标签解析：光伏静态表优先，风电/水电/光伏阵列 ID 走各自 fixture 注册表（windFarm.ts / hydroDam.ts / solarArray.ts；未命中回退原 ID，互不冲突） */
+const labelOf = (id: string): string => {
+  if (TARGET_LABEL[id]) return TARGET_LABEL[id];
+  const windLabel = windTargetLabel(id);
+  if (windLabel !== id) return windLabel;
+  const hydroLabel = hydroTargetLabel(id);
+  return hydroLabel !== id ? hydroLabel : solarTargetLabel(id);
+};
 
 const MOVE_VERB: Record<AvatarMovement, string> = { walk: '步行', run: '跑步', fly: '飞行' };
 
@@ -428,9 +455,208 @@ function parseWindSingle(text: string): AvatarCommand[] | null {
   return matched.length === 1 ? matched[0] : null;
 }
 
+// —— 水电场景（HYDRO-PLANT-01，镜像风电模式）：登记对象 OPS-HYDRO-01 / CP-HU-01..03 / CP-GATE-01 / HS-HU-01..03 / HS-GATE-01；维修仅 HS-HU-02 水轮机主轴密封 ——
+
+const HYDRO_RE = {
+  unitWord: /机组|水轮机/,
+  gateWord: /泄洪闸|闸门/,
+  unitNo: /([0-9]{1,2}|[一二两三四五六七八九十])\s*号/,
+  moveVerb: /走|跑|飞|去|到|前往|赶到|回/,
+  focusVerb: /查看|看看|看一下|聚焦|对准/,
+} as const;
+
+/** 「2 号机组」编号提取：阿拉伯或简式中文数字，未登记编号由调用方澄清 */
+function extractHydroUnitNo(text: string): number | null {
+  const m = text.match(HYDRO_RE.unitNo);
+  if (!m) return null;
+  const raw = m[1];
+  const no = /^[0-9]+$/.test(raw) ? Number.parseInt(raw, 10) : cnToInt(raw);
+  return Number.isFinite(no) ? no : null;
+}
+
+/** 水电导航动词：坝区尺度大，未明说走/跑时默认飞行（与风电一致） */
+function hydroMovement(text: string): AvatarMovement {
+  if (RE.fly.test(text)) return 'fly';
+  if (RE.run.test(text)) return 'run';
+  if (/走/.test(text)) return 'walk';
+  return 'fly';
+}
+
+/** 机组编号解析：仅 1~3 号机组（HS-HU-01..03）；no=4 是泄洪闸门，不算机组 */
+function hydroTurbineByNo(no: number) {
+  const u = hydroUnitByNo(no);
+  return u && u.id.startsWith('HS-HU') ? u : null;
+}
+
+/** 水电维修意图：仅登记 2 号机组（HS-HU-02 水轮机主轴密封 @ CP-HU-02），其他编号/闸门不猜 */
+function parseHydroRepair(text: string): AvatarCommand[] | null {
+  if (!RE.repair.test(text)) return null;
+  if (!HYDRO_RE.unitWord.test(text) && !HYDRO_RE.gateWord.test(text)) return null;
+  if (HYDRO_RE.gateWord.test(text) && !HYDRO_RE.unitWord.test(text)) {
+    clarify(`维修目标未登记：本场景仅登记 2 号机组维修（${HYDRO_REPAIR.targetId} ${HYDRO_REPAIR.componentLabel}），闸门维修未登记`);
+  }
+  const no = extractHydroUnitNo(text);
+  if (no === null) {
+    clarify(`维修目标不明确：请说「维修 N 号机组」；本场景仅登记 ${HYDRO_REPAIR.componentLabel}（${HYDRO_REPAIR.targetId}）`);
+  }
+  if (no !== 2) {
+    clarify(`维修目标未登记：本场景仅登记 2 号机组维修（${HYDRO_REPAIR.targetId} ${HYDRO_REPAIR.componentLabel}），不猜测 ${no} 号`);
+  }
+  return withIds([
+    { kind: 'navigate', targetId: 'CP-HU-02', movement: hydroMovement(text) },
+    { kind: 'focus_asset', targetId: 'HS-HU-02' },
+    { kind: 'repair_simulation', targetId: 'HS-HU-02', checkpointId: 'CP-HU-02' },
+  ]);
+}
+
+/** 水电导航意图：「走/跑/飞/去/回 + N 号机组 / 泄洪闸门 / 运维点」；未登记编号澄清 */
+function parseHydroNavigate(text: string): AvatarCommand[] | null {
+  const hits: string[] = [];
+  const no = extractHydroUnitNo(text);
+  if (HYDRO_RE.gateWord.test(text) && HYDRO_RE.moveVerb.test(text) && !HYDRO_RE.unitWord.test(text)) {
+    hits.push('CP-GATE-01');
+  } else if (no !== null && HYDRO_RE.unitWord.test(text) && HYDRO_RE.moveVerb.test(text)) {
+    const u = hydroTurbineByNo(no);
+    if (!u) {
+      throw new AvatarClarificationError(`未登记 ${no} 号机组：本场景登记 1~3 号机组（HS-HU-01..03）与泄洪闸门（HS-GATE-01）`);
+    }
+    hits.push(u.checkpointId);
+  }
+  if (RE.ops.test(text)) hits.push('OPS-HYDRO-01');
+  const unique = [...new Set(hits)];
+  if (unique.length === 0) return null;
+  if (unique.length > 1) {
+    clarify(`目标不唯一（命中 ${unique.map((t) => labelOf(t)).join('、')}）：一次说一个目的地，例如「飞到 2 号机组」`);
+  }
+  return withIds([{ kind: 'navigate', targetId: unique[0] as AvatarTargetId, movement: hydroMovement(text) }]);
+}
+
+/** 水电聚焦意图：「查看/聚焦 N 号机组 / 泄洪闸门」（不含移动动词，否则归导航） */
+function parseHydroFocus(text: string): AvatarCommand[] | null {
+  if (!HYDRO_RE.focusVerb.test(text) || HYDRO_RE.moveVerb.test(text)) return null;
+  if (HYDRO_RE.gateWord.test(text) && !HYDRO_RE.unitWord.test(text)) {
+    return withIds([{ kind: 'focus_asset', targetId: 'HS-GATE-01' }]);
+  }
+  const no = extractHydroUnitNo(text);
+  if (no === null || !HYDRO_RE.unitWord.test(text)) return null;
+  const u = hydroTurbineByNo(no);
+  if (!u) {
+    throw new AvatarClarificationError(`未登记 ${no} 号机组：本场景登记 1~3 号机组（HS-HU-01..03）与泄洪闸门（HS-GATE-01）`);
+  }
+  return withIds([{ kind: 'focus_asset', targetId: u.id as HydroUnitId }]);
+}
+
+/** 水电巡检路线规划意图：「规划巡检路线 / 巡检一圈 / 来条路线 / 带我巡检一遍」→ 依次 fly 导航 1→2→3 号机组 → 泄洪闸门（多命令数组，走 commands 通道逐站执行） */
+const HYDRO_ROUTE_PLAN_RE = /规划.{0,4}路线|巡检路线|巡检一圈|巡检一遍|来条路线|带我巡检/;
+
+/** 路线站点从 dam.json 派生：机组按 no 升序在前，泄洪闸门收尾（单一事实源，不手抄 ID） */
+function hydroRouteStops(): HydroCheckpointId[] {
+  const units = hydroDam.units.filter((u) => u.id.startsWith('HS-HU')).sort((a, b) => a.no - b.no);
+  const gates = hydroDam.units.filter((u) => u.id.startsWith('HS-GATE'));
+  return [...units, ...gates].map((u) => u.checkpointId as HydroCheckpointId);
+}
+
+function parseHydroRoutePlan(text: string): AvatarCommand[] | null {
+  if (!HYDRO_ROUTE_PLAN_RE.test(text)) return null;
+  return withIds(hydroRouteStops().map((targetId) => ({ kind: 'navigate' as const, targetId, movement: 'fly' as const })));
+}
+
+/** 水电单句解析：路线规划 → 维修 → 导航/聚焦 → 通用简单动作；一句多意图不猜 */
+function parseHydroSingle(text: string): AvatarCommand[] | null {
+  const routePlan = parseHydroRoutePlan(text);
+  if (routePlan) return routePlan;
+  const repair = parseHydroRepair(text);
+  if (repair) return repair;
+  const nav = parseHydroNavigate(text);
+  const focus = parseHydroFocus(text);
+  const simple = parseSimple(text);
+  const turn = parseTurn(text);
+  const relative = parseRelative(text);
+  const matched = [nav, focus, simple, turn, relative].filter(Boolean) as AvatarCommand[][];
+  if (matched.length > 1) {
+    clarify('一句包含多个动作，暂不支持：请一次说一个动作，例如「先停下」或「左转 90 度」');
+  }
+  return matched.length === 1 ? matched[0] : null;
+}
+
+
+// —— 光伏阵列「找板子」意图（solarArray.ts / solar.json 登记 84 组串；区编址 A~G，每区 12 串） ——
+// 首页痛点「组串成千上万，热斑难定位」：一句话定位某块组串。语义键是 (区, 串号)，STR-ID 仅作别名解析。
+
+const SOLAR_RE = {
+  stringWord: /组串|光伏板|板子/,
+  locateVerb: /在哪|哪里|定位|找到|带我去|带我到|带我过去|去看看|看一下|看看/,
+  zone: /([A-G])\s*区/i,
+  stringNo: /([0-9]{1,2}|十[一二]?|[一二两三四五六七八九])\s*号/,
+  stringId: /STR-([A-G])[12]-([0-9]{1,2})/i,
+} as const;
+
+type SolarResolve =
+  | { hit: import('./solarArray').SolarString }
+  | { ambiguousNo: number }
+  | { unregistered: string }
+  | null;
+
+/** 组串指称解析：STR-ID / 区+号（「2 排」排号忽略，兼容旧说法）→ fixture 登记组串；缺区号/未登记交调用方澄清 */
+function resolveSolarString(text: string): SolarResolve {
+  const idM = text.match(SOLAR_RE.stringId);
+  if (idM) {
+    // ID 的语义键同样是 (区, 串号)：STR-B1-07 与 STR-B2-07 同指 B 区 7 号（B 区 7 号挂 INV-B-02，以 fixture 登记为准）
+    const s = solarStringByZoneNo(idM[1].toUpperCase(), Number.parseInt(idM[2], 10));
+    return s ? { hit: s } : { unregistered: idM[0].toUpperCase() };
+  }
+  const noM = text.match(SOLAR_RE.stringNo);
+  if (!noM) return null;
+  const raw = noM[1];
+  const no = /^[0-9]+$/.test(raw) ? Number.parseInt(raw, 10) : cnToInt(raw);
+  if (!Number.isFinite(no)) return null;
+  const zoneM = text.match(SOLAR_RE.zone);
+  if (!zoneM) return { ambiguousNo: no };
+  const s = solarStringByZoneNo(zoneM[1].toUpperCase(), no);
+  return s ? { hit: s } : { unregistered: `${zoneM[1].toUpperCase()} 区 ${no} 号` };
+}
+
+/** 光伏阵列维修意图：「维修 B 区 7 号组串 / 维修 STR-B2-07」→ navigate + focus_asset + repair_simulation（镜像风电模式）；仅 STR-B2-07 登记旁路二极管维修，其他组串不猜 */
+function parseSolarRepair(text: string): AvatarCommand[] | null {
+  if (!RE.repair.test(text)) return null;
+  if (!SOLAR_RE.stringWord.test(text) && !SOLAR_RE.stringId.test(text)) return null;
+  const r = resolveSolarString(text);
+  // 无编号或不带区号：维持旧行为（「维修 7 号异常组串」→ 唯一登记异常组串 @ CP-INV-B02，见 parseRepair）
+  if (!r || 'ambiguousNo' in r) return null;
+  if ('unregistered' in r) {
+    throw new AvatarClarificationError(`维修目标未登记：${r.unregistered} 不在本场景登记内（A~G 区各 12 串，共 84 串），不猜测其他组串`);
+  }
+  const s = r.hit;
+  if (s.id !== SOLAR_REPAIR.targetId) {
+    throw new AvatarClarificationError(`该组串未登记维修对象：${s.label}（${s.id}）无维修登记；本场景仅登记${SOLAR_REPAIR.componentLabel}维修（${SOLAR_REPAIR.targetId}）`);
+  }
+  return withIds([
+    { kind: 'navigate', targetId: s.checkpointId as SolarStringCheckpointId, movement: 'walk' },
+    { kind: 'focus_asset', targetId: 'STR-B2-07' },
+    { kind: 'repair_simulation', targetId: 'STR-B2-07', checkpointId: 'CP-STR-B-07' },
+  ]);
+}
+
+/** 光伏阵列定位意图：「B 区 7 号组串在哪 / 定位 STR-B2-07 / 带我去 C 区 3 号组串」→ walk 导航到组串旁检查点（平地阵列）；只说「7 号组串」缺区号 → 澄清 A~G 分区 */
+function parseSolarLocate(text: string): AvatarCommand[] | null {
+  if (!SOLAR_RE.locateVerb.test(text)) return null;
+  if (!SOLAR_RE.stringWord.test(text) && !SOLAR_RE.stringId.test(text)) return null;
+  const r = resolveSolarString(text);
+  if (!r) return null;
+  if ('ambiguousNo' in r) {
+    throw new AvatarClarificationError(`组串定位需要区号：本场景按 A~G 分区（A=中心，B/C=南排，D=东，E/F=北排，G=西），每区 12 串；请说「B 区 ${r.ambiguousNo} 号组串」`);
+  }
+  if ('unregistered' in r) {
+    throw new AvatarClarificationError(`未登记组串：${r.unregistered}；本场景登记 A~G 区各 12 串（共 84 串），例如「B 区 7 号组串」`);
+  }
+  return withIds([{ kind: 'navigate', targetId: r.hit.checkpointId as SolarStringCheckpointId, movement: 'walk' }]);
+}
 
 /** 光伏单句（无连接词）解析；无法理解返回 null（由入口统一澄清） */
 function parseSingle(text: string): AvatarCommand[] | null {
+  const solarRepair = parseSolarRepair(text);
+  if (solarRepair) return solarRepair;
+
   const repair = parseRepair(text);
   if (repair) return repair;
 
@@ -443,6 +669,9 @@ function parseSingle(text: string): AvatarCommand[] | null {
 
   const evidence = parseEvidence(text);
   if (evidence) return evidence;
+
+  const solarLocate = parseSolarLocate(text);
+  if (solarLocate) return solarLocate;
 
   const nav = parseNavigate(text);
   const simple = parseSimple(text);
@@ -458,15 +687,15 @@ function parseSingle(text: string): AvatarCommand[] | null {
 }
 
 /**
- * 解析一句中文指令 → 受控命令序列。scene='pecc'（默认，光伏园区）或 'wind'（风电场站，合同 §9）。
+ * 解析一句中文指令 → 受控命令序列。scene='pecc'（默认，光伏园区）、'wind'（风电场站，合同 §9）或 'hydro'（水电站，镜像风电模式）。
  * 无法理解 / 目标不唯一 / 一句多动作 → AvatarClarificationError（路由层转 400 CLARIFICATION_NEEDED）。
  */
 export function parseAvatarCommand(rawText: string, scene: AvatarScene = 'pecc'): AvatarCommand[] {
   const text = normalizeCnNumbers(normalizeAvatarText(rawText));
-  const examples = scene === 'wind' ? WIND_AVATAR_EXAMPLES : AVATAR_EXAMPLES;
+  const examples = scene === 'wind' ? WIND_AVATAR_EXAMPLES : scene === 'hydro' ? HYDRO_AVATAR_EXAMPLES : AVATAR_EXAMPLES;
   try {
     if (!text) return clarify('指令为空：请说一句可执行的指令');
-    const parseOne = scene === 'wind' ? parseWindSingle : parseSingle;
+    const parseOne = scene === 'wind' ? parseWindSingle : scene === 'hydro' ? parseHydroSingle : parseSingle;
 
     // 复合句（然后/再/，…）：分段解析，多段命中动作 → 澄清，不静默丢弃
     const parts = text.split(/然后|接着|之后|以后|，|,|。|；|;|！|!|？|\?/).map((p) => p.trim()).filter(Boolean);
@@ -482,6 +711,7 @@ export function parseAvatarCommand(rawText: string, scene: AvatarScene = 'pecc')
     return parseOne(text) ?? clarify(`无法理解指令：「${normalizeAvatarText(rawText)}」。可说的示例：${examples.slice(0, 5).join('；')} 等`);
   } catch (e) {
     if (e instanceof AvatarClarificationError && scene === 'wind') throw e.withExamples(WIND_AVATAR_EXAMPLES);
+    if (e instanceof AvatarClarificationError && scene === 'hydro') throw e.withExamples(HYDRO_AVATAR_EXAMPLES);
     throw e;
   }
 }
@@ -495,10 +725,19 @@ export function interpretAvatarCommand(rawText: string, scene: AvatarScene = 'pe
 }
 
 export function buildReply(commands: AvatarCommand[]): string {
+  // 多站纯导航序列 = 巡检路线规划（当前仅水电路线意图产生）：报站名清单而非逐条确认
+  if (commands.length > 1 && commands.every((c) => c.kind === 'navigate')) {
+    const stops = commands.map((c) => labelOf((c as { targetId: string }).targetId).replace(/(?:检查点|塔下)$/, ''));
+    return `已规划巡检路线：${stops.join(' → ')}，共 ${stops.length} 站，依次前往。`;
+  }
   const last = commands[commands.length - 1];
   switch (last.kind) {
-    case 'navigate':
+    case 'navigate': {
+      // 光伏阵列组串定位：回复带相对方位（offset 符号推出，演示级简单描述）
+      const s = solarStringByCheckpointId(last.targetId);
+      if (s) return `${s.label}在${solarBearingText(s)}，已带你过去。`;
       return `收到，${MOVE_VERB[last.movement]}前往「${labelOf(last.targetId)}」。`;
+    }
     case 'move_relative': {
       const dirLabel = { forward: '前', backward: '后', left: '左', right: '右', up: '上', down: '下' }[last.direction];
       return `收到，向${dirLabel}${MOVE_VERB[last.movement]} ${last.distanceMeters} 米。`;
@@ -517,6 +756,12 @@ export function buildReply(commands: AvatarCommand[]): string {
     case 'repair_simulation': {
       if (last.targetId === 'HS-WTG-07') {
         return `收到，前往 7 号风机塔下（CP-WT-07）并执行${WIND_REPAIR.componentLabel}维修仿真（SIMULATED），逐步骤留痕。`;
+      }
+      if (last.targetId === 'HS-HU-02') {
+        return `收到，前往 2 号机组（CP-HU-02）并执行${HYDRO_REPAIR.componentLabel}维修仿真（SIMULATED），逐步骤留痕。`;
+      }
+      if (last.targetId === 'STR-B2-07' && last.checkpointId === 'CP-STR-B-07') {
+        return `收到，前往 B 区 7 号组串（CP-STR-B-07）并执行${SOLAR_REPAIR.componentLabel}维修仿真（SIMULATED），逐步骤留痕。`;
       }
       const flewToRoof = commands.some((c) => c.kind === 'navigate' && c.targetId === 'CP-B02-ROOF');
       return flewToRoof

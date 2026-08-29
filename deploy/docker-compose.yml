@@ -1,0 +1,23 @@
+services:
+  engine:
+    build: ./engine
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "172.18.0.1:18787:8787"  # 供 private-ops-demo 的 Caddy 容器经网关 IP 反代（docker 跨项目 DNS 解析异常，绕过容器名）
+    volumes:
+      - ./engine-data:/data:ro
+      - ./web/dist/wind/farm.json:/player-demo/example/public/wind/farm.json:ro
+      - engine-var:/app/var
+
+  web:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "172.18.0.1:18080:80"
+    volumes:
+      - ./web/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./web/dist:/usr/share/nginx/html:ro
+
+volumes:
+  engine-var:

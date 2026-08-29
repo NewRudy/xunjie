@@ -13,3 +13,8 @@ coverage/
 player-demo/example/public/cesium/
 player-demo/example/public/glb/
 player-demo/example/public/wind/assets/
+player-demo/example/public/hydro/assets/
+player-demo/example/public/solar/assets/
+
+# 部署构建产物（vite build 再生；部署配置见 deploy/）
+player-demo/deploy-dist/

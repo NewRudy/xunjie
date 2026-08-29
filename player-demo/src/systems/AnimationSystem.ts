@@ -285,6 +285,8 @@ export class AnimationSystem {
     // 按键状态触发动画
     setAnimationByPressed() {
         if (!this.model) return;
+        // 脚本动画覆盖（外部编排器 reset 驱动位移时）：强制播放指定动画，不响应按键状态
+        if (this.ctrl.scriptedAnimKey) { this.playByName(this.ctrl.scriptedAnimKey); return; }
         // 恢复相机距离
         this.ctrl.cam.maxDist = this.ctrl.cam.originMaxDist;
         const { fwd, bkd, lft, rgt, shift, space } = this.ctrl.input;

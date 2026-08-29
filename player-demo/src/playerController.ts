@@ -62,6 +62,10 @@ export class playerController {
     private lastUpdateTime = 0; // 上一帧时间戳
     currentDelta = 0; // 本帧实际使用的 delta（已钳制 + timeScale）
     isFlying = false; // 飞行状态
+    // 脚本动画覆盖键：非空时 AnimationSystem.setAnimationByPressed 直接播放它。
+    // 供外部编排器（如风电示例的指令执行器）在 reset 驱动的脚本位移期间指定动画，
+    // 避免无按键输入时被每帧强制切回 idle 造成动画闪断。
+    scriptedAnimKey: string | null = null;
     enableToward = true; // 启用朝向输入
     enableOverShoulderView = false; // 越肩视角开关
     private isShowMobileControls = true; // 显示移动端控件
@@ -1078,6 +1082,8 @@ export class playerController {
     switchLocomotionSet(setName: string) { this.animation.switchLocomotionSet(setName); }
     // 获取当前移动动作组名
     getCurrentLocomotionSet() { return this.animation.currentLocomotionSet; }
+    // 设置/清除脚本动画覆盖（传 null 恢复按键驱动）
+    setScriptedAnimation(key: string | null) { this.scriptedAnimKey = key; }
 
     // --- 输入 ---
     // 设置输入状态

@@ -10,6 +10,7 @@ import { doubaoAsrTranscribe, voiceConfigured } from './voice';
 import { AvatarClarificationError } from './avatar';
 import { interpretAvatar } from './avatar-llm';
 import { WIND_SCENE_ID, WIND_SCENE_REVISION } from './windFarm';
+import { HYDRO_SCENE_ID, HYDRO_SCENE_REVISION } from './hydroDam';
 import type { SceneEventInput } from './types';
 
 export const agentRoutes = new Hono();
@@ -49,10 +50,11 @@ agentRoutes.post('/missions', async (c) => {
 // —— POST /api/agent/avatar/interpret：自然语言 → 受控数字人动作（contracts/avatar-command.md §0/§2/§9） ——
 // LLM-first：配置 AGENT_LLM_API_KEY 时真实调用 OpenAI-compatible 模型，模型 JSON 过确定性白名单校验后返回；
 // 未配置/失败 → 确定性中文解析回退。只读演示控制面，不改 MissionState 与任务闭环。
-// 场景白名单：PECC-PARK-01（光伏）与 WIND-FARM-01（风电，登记见 windFarm.ts/farm.json）。
-const AVATAR_SCENES: Record<string, { sceneRevision: string; scene: 'pecc' | 'wind'; sourceRef: string }> = {
+// 场景白名单：PECC-PARK-01（光伏）、WIND-FARM-01（风电，登记见 windFarm.ts/farm.json）与 HYDRO-PLANT-01（水电，登记见 hydroDam.ts/dam.json）。
+const AVATAR_SCENES: Record<string, { sceneRevision: string; scene: 'pecc' | 'wind' | 'hydro'; sourceRef: string }> = {
   [SCENE_ID]: { sceneRevision: SCENE_REVISION, scene: 'pecc', sourceRef: 'data/fixtures/park-pecc-01.json' },
   [WIND_SCENE_ID]: { sceneRevision: WIND_SCENE_REVISION, scene: 'wind', sourceRef: 'player-demo/example/public/wind/farm.json' },
+  [HYDRO_SCENE_ID]: { sceneRevision: HYDRO_SCENE_REVISION, scene: 'hydro', sourceRef: 'player-demo/example/public/hydro/dam.json' },
 };
 
 /** 场景白名单守卫：未登记返回 400 响应（不猜场景），通过返回 null */
@@ -103,7 +105,7 @@ agentRoutes.post('/avatar/interpret', async (c) => {
 // 解释与 /avatar/interpret 完全相同（LLM-first + 白名单校验 + 确定性回退）；差异在执行权：
 // 闭环命令由服务端直接执行——start_inspection=复位+建任务原子化；decide_pending=服务端补全当前
 // 待审批四重绑定；capture_evidence=走既有状态机（过早暂存/缺 ROOF 阻塞）。场景命令原样返回前端执行；
-// 审批签发的 pendingCommands 仍在任务快照里，前端按既有通道执行。风电场景闭环命令显式拒绝。
+// 审批签发的 pendingCommands 仍在任务快照里，前端按既有通道执行。风电/水电场景闭环命令显式拒绝。
 agentRoutes.post('/avatar/dispatch', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body.text !== 'string' || !body.text.trim() || typeof body.sceneId !== 'string' || typeof body.sceneRevision !== 'string') {

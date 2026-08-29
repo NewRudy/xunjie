@@ -5,6 +5,8 @@
 // 装载期校验（ID 唯一、必要字段）不过直接抛错——坏场景包宁可起不来，不带病运行。
 import { fixture } from '../fixture';
 import { windFarm } from '../agent/windFarm';
+import { hydroDam } from '../agent/hydroDam';
+import { SOLAR_STRINGS, solarArray } from '../agent/solarArray';
 
 export type SceneKind = 'pv' | 'wind' | 'hydro';
 export type RiskLevel = 'normal' | 'warning' | 'critical';
@@ -60,10 +62,43 @@ function adaptWind(): ScenePackage {
   return {
     sceneId: windFarm.sceneId,
     sceneRevision: windFarm.sceneRevision,
-    name: `${windFarm.name}（风电场站·演示仿真）`,
+    name: windFarm.name,
     kind: 'wind',
     sourceRef: 'player-demo/example/public/wind/farm.json',
     specs: windFarm.specs ?? {},
+    objects,
+  };
+}
+
+// —— 水电适配：player-demo/example/public/hydro/dam.json（前端同源，单一事实源；镜像风电适配模式） ——
+
+function adaptHydro(): ScenePackage {
+  const objects: SceneObject[] = hydroDam.units.map((u) => {
+    const isGate = u.id.startsWith('HS-GATE');
+    return {
+      id: u.id,
+      label: u.label,
+      aliases: isGate
+        ? ['泄洪闸', '泄洪闸门', '闸门', `${u.no}号闸门`, `${u.no} 号闸门`, u.id]
+        : [`${u.no}号机组`, `${u.no} 号机组`, `${u.no}号水轮发电机组`, u.id],
+      kind: 'device' as const,
+      checkpointId: u.checkpointId,
+      riskLevel: u.riskLevel ?? ('normal' as const),
+      stateNote: u.stateNote,
+      position: u.offset,
+      headingDeg: u.headingDeg,
+    };
+  });
+  if (hydroDam.opsPoint) {
+    objects.push({ id: hydroDam.opsPoint.id, label: hydroDam.opsPoint.label, aliases: [hydroDam.opsPoint.label, '电站运维点'], kind: 'ops' });
+  }
+  return {
+    sceneId: hydroDam.sceneId,
+    sceneRevision: hydroDam.sceneRevision,
+    name: hydroDam.name,
+    kind: 'hydro',
+    sourceRef: 'player-demo/example/public/hydro/dam.json',
+    specs: hydroDam.specs ?? {},
     objects,
   };
 }
@@ -118,6 +153,40 @@ function adaptPecc(): ScenePackage {
   if (fixture.opsPoint) {
     objects.push({ id: fixture.opsPoint.id, label: String(fixture.opsPoint.name ?? '运维点'), aliases: ['运维点'], kind: 'ops' });
   }
+  // —— 阵列补充登记：player-demo/example/public/solar/solar.json 84 组串（与既有 park fixture 合并；已登记 ID 保留既有条目，不覆盖） ——
+  const seenIds = new Set(objects.map((o) => o.id));
+  for (const s of SOLAR_STRINGS) {
+    if (seenIds.has(s.id)) continue; // STR-B2-07 已由 park fixture 登记为 7 号异常组串（带异常状态）
+    seenIds.add(s.id);
+    objects.push({
+      id: s.id,
+      label: s.label,
+      aliases: [`${s.zone}区${s.no}号组串`, `${s.zone} 区 ${s.no} 号组串`, `${s.zone}区${s.no}号`, s.id],
+      kind: 'device',
+      checkpointId: s.checkpointId,
+      riskLevel: 'normal',
+      stateNote: s.inverterId ? `接入 ${s.inverterId}，运行正常` : '运行正常',
+      specs: {
+        ...(s.panelCount ? { 组件数量: `${s.panelCount} 块` } : {}),
+        ...(solarArray.specs?.['组件型号'] ? { 组件型号: solarArray.specs['组件型号'] } : {}),
+      },
+      position: s.offset,
+    });
+  }
+  for (const inv of solarArray.inverters) {
+    if (seenIds.has(inv.id)) continue; // INV-B-02 已由 park fixture 登记
+    seenIds.add(inv.id);
+    objects.push({
+      id: inv.id,
+      label: inv.label,
+      aliases: [inv.label, inv.id],
+      kind: 'device',
+      checkpointId: inv.checkpointId,
+      riskLevel: 'normal',
+      stateNote: '运行正常',
+      position: inv.offset,
+    });
+  }
   return {
     sceneId: 'PECC-PARK-01',
     sceneRevision: 'fixture-v1',
@@ -133,7 +202,7 @@ function adaptPecc(): ScenePackage {
 
 const packages: Record<string, ScenePackage> = {};
 
-for (const pkg of [adaptPecc(), adaptWind()]) {
+for (const pkg of [adaptPecc(), adaptWind(), adaptHydro()]) {
   const seen = new Set<string>();
   for (const o of pkg.objects) {
     if (!o.id || !o.label) throw new Error(`场景包 ${pkg.sceneId} 对象缺少 id/label`);

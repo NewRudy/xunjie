@@ -11,6 +11,7 @@ import type { PlannerInfo } from './types';
 
 const AVATAR_SYSTEM_PROMPT_PECC = renderAvatarSystemPromptFor('pecc');
 const AVATAR_SYSTEM_PROMPT_WIND = renderAvatarSystemPromptFor('wind');
+const AVATAR_SYSTEM_PROMPT_HYDRO = renderAvatarSystemPromptFor('hydro');
 
 export const AVATAR_LLM_MAX_COMMANDS = 6;
 const REPLY_MAX_CHARS = 200;
@@ -58,8 +59,9 @@ function validateCommand(raw: unknown, scene: AvatarScene): CommandCheck {
     return { ok: false, code: 'MOVEMENT_FLY' };
   }
   if (kind === 'repair_simulation') {
-    const pair = avatarRepairPairsFor(scene).find((p) => p.targetId === raw.targetId);
-    if (!pair || raw.checkpointId !== pair.checkpointId) return { ok: false, code: 'TARGET' };
+    // 同一目标可登记多个落点（STR-B2-07：CP-INV-B02 / CP-STR-B-07），按 (targetId, checkpointId) 成对匹配
+    const pair = avatarRepairPairsFor(scene).some((p) => p.targetId === raw.targetId && p.checkpointId === raw.checkpointId);
+    if (!pair) return { ok: false, code: 'TARGET' };
   }
 
   const { kind: _kind, ...values } = raw;
@@ -103,7 +105,7 @@ async function interpretViaLlm(rawText: string, scene: AvatarScene, history?: Av
   const userPayload = history?.length ? { text: normalizeAvatarText(rawText), recent: history } : { text: normalizeAvatarText(rawText) };
   const res = await structured<Record<string, unknown>>({
     messages: [
-      { role: 'system', content: scene === 'wind' ? AVATAR_SYSTEM_PROMPT_WIND : AVATAR_SYSTEM_PROMPT_PECC },
+      { role: 'system', content: scene === 'wind' ? AVATAR_SYSTEM_PROMPT_WIND : scene === 'hydro' ? AVATAR_SYSTEM_PROMPT_HYDRO : AVATAR_SYSTEM_PROMPT_PECC },
       { role: 'user', content: JSON.stringify(userPayload) },
     ],
     parse: (v) => (isPlainObject(v) ? v : null),
